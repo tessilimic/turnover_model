@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_call: # reused by deploy.yaml
+
+permissions:
+  contents: read
+
+# github.workflow = caller's name when called from deploy.yaml,
+# so the CI run and the deploy run on main don't cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Exit code 5 = no tests collected: tolerated until tests/ exists.
+      - name: Run tests with coverage
+        run: pytest --cov --cov-report=term-missing || [ $? -eq 5 ]
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Skipped until a Dockerfile is added at the repo root.
+      - name: Build image
+        if: hashFiles('Dockerfile') != ''
+        run: docker build -t turnover-api:ci .
