@@ -65,7 +65,14 @@ En local :
 ```bash
 pytest --cov                          # tableau dans le terminal (lignes manquantes)
 pytest --cov --cov-report=html        # rapport navigable : ouvrir htmlcov/index.html
+pytest -m unit --cov --cov-fail-under=0   # une seule catégorie : sans le seuil
 ```
+
+!!! note "Seuil et lancements partiels"
+    Le seuil s'applique à **chaque** lancement de `pytest --cov`. Une catégorie seule ne
+    couvre qu'une partie du code (68 % pour les tests unitaires) : ajouter
+    `--cov-fail-under=0`. C'est ce que fait la CI pour chaque catégorie, avant de
+    vérifier le seuil une seule fois sur le total cumulé.
 
 !!! tip "Relever le seuil"
     Quand la couverture progresse durablement, relever `fail_under` dans `pyproject.toml`

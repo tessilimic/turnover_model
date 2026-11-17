@@ -57,14 +57,16 @@ jobs:
 
       # One step per category (markers set from tests/<category>/),
       # coverage (lines + branches, see pyproject.toml) accumulated across steps.
+      # --cov-fail-under=0: each category alone covers only part of the code; the
+      # threshold applies once, to the accumulated total (step "Coverage threshold").
       - name: Unit tests
-        run: pytest -m unit --cov --cov-report=
+        run: pytest -m unit --cov --cov-report= --cov-fail-under=0
 
       - name: Integration tests (PostgreSQL, exported model)
-        run: pytest -m integration --cov --cov-append --cov-report=
+        run: pytest -m integration --cov --cov-append --cov-report= --cov-fail-under=0
 
       - name: Functional tests (API over HTTP)
-        run: pytest -m functional --cov --cov-append --cov-report=
+        run: pytest -m functional --cov --cov-append --cov-report= --cov-fail-under=0
 
       # Reports are produced even if a test step failed (partial coverage helps to debug).
       - name: Coverage report (HTML, XML, job summary)
