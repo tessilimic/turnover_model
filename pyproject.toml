@@ -1,6 +1,12 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "unit: fonction isolée, sans base de données ni vrai modèle (rapide)",
+    "integration: base de données réelle et/ou modèle exporté",
+    "functional: API appelée en HTTP, de bout en bout",
+]
 
 [tool.coverage.run]
 source = ["app", "src"]

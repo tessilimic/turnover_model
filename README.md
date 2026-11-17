@@ -28,3 +28,20 @@ docker compose up -d --build api # API sur http://localhost:7860/docs
 - Fichiers SQL dans [`sql/`](sql/), requêtes de consultation dans `sql/02_requetes_utiles.sql`.
 - Connexion configurable via `DATABASE_URL` (par défaut : la base de `docker-compose.yml`).
   Sur Hugging Face, sans PostgreSQL, l'API utilise un fichier SQLite non persistant.
+
+## Tests
+
+| Dossier | Marqueur | Contenu |
+|---|---|---|
+| `tests/unit/` | `unit` | Fonctions isolées (faux modèle, fausse session) : ni base, ni `.joblib` |
+| `tests/integration/` | `integration` | Base de données réelle, modèle exporté |
+| `tests/functional/` | `functional` | L'API appelée en HTTP, de bout en bout |
+
+```bash
+pytest                 # tout (base SQLite temporaire)
+pytest -m unit         # tests unitaires seuls, en quelques secondes
+
+# Sur PostgreSQL (base de test dédiée, à créer une fois) :
+docker compose exec db createdb -U turnover turnover_test
+TEST_DATABASE_URL=postgresql+psycopg://turnover:turnover@localhost:5433/turnover_test pytest
+```
