@@ -90,6 +90,7 @@ class EmployeInput(BaseModel):
 
 
 class PredictionOutput(BaseModel):
+    id_prediction: int = Field(description="Identifiant de la prédiction en base (table predictions)")
     probabilite_depart: float = Field(ge=0, le=1, description="Probabilité de départ estimée")
     seuil: float = Field(description="Seuil de décision du modèle")
     depart_predit: bool = Field(description="True si probabilite_depart >= seuil")

@@ -8,3 +8,4 @@ htmlcov/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+*.db

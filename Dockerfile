@@ -11,6 +11,11 @@ ENV HOME=/home/user \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# No PostgreSQL on Hugging Face Spaces: default to a SQLite file
+# (ephemeral, lost on restart). docker-compose.yml overrides it with PostgreSQL.
+RUN mkdir -p $HOME/db
+ENV DATABASE_URL=sqlite:////home/user/db/turnover.db
+
 WORKDIR $HOME/app
 
 # Dependencies first, so this layer is cached when only the code changes.

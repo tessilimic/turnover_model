@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import joblib
+import pandas as pd
 import pytest
 import sklearn
 
-from src.features import COLONNES_ENTREE
+from src.db.init_db import lire_csv
+from src.features import CIBLE, COLONNES_ENTREE
 from src.train import charger_donnees, separer_x_y
 
 CHEMIN_MODELE = Path(__file__).resolve().parents[1] / "model" / "pipeline.joblib"
@@ -16,8 +18,8 @@ def artefact() -> dict:
 
 
 @pytest.fixture(scope="module")
-def donnees():
-    return separer_x_y(charger_donnees())
+def donnees(engine):
+    return separer_x_y(charger_donnees(engine))
 
 
 def test_charger_donnees(donnees):
@@ -27,6 +29,34 @@ def test_charger_donnees(donnees):
     assert list(X.columns) == COLONNES_ENTREE
     assert not X.isna().any().any()
     assert set(y.unique()) == {0, 1}
+
+
+def test_donnees_en_base_identiques_aux_csv(donnees):
+    """Entraîner depuis la base ou depuis les CSV donne exactement les mêmes données."""
+    X, y = donnees
+    csv = lire_csv()
+
+    pd.testing.assert_frame_equal(
+        X.reset_index(drop=True), csv[COLONNES_ENTREE].reset_index(drop=True), check_dtype=False
+    )
+    assert y.tolist() == csv[CIBLE].eq("Oui").astype(int).tolist()
+
+
+def test_predictions_api_exclues_de_l_entrainement(engine, donnees):
+    from sqlalchemy.orm import Session
+
+    from app.schemas import EXEMPLE_EMPLOYE
+    from src.db.models import Employe, Prediction
+
+    with Session(engine) as session:
+        session.add(Employe(**EXEMPLE_EMPLOYE, predictions=[
+            Prediction(origine="prediction", depart=True, probabilite=0.9, seuil=0.41)
+        ]))
+        session.commit()
+
+    X, _ = separer_x_y(charger_donnees(engine))
+
+    assert len(X) == len(donnees[0]) == 1470
 
 
 def test_artefact_contient_pipeline_et_seuil(artefact):
