@@ -12,6 +12,7 @@ URL de base :
 | `GET` | `/` | Redirige vers `/docs` |
 | `GET` | `/health` | État du service |
 | `POST` | `/predict` | Prédit le départ d'un employé et enregistre la prédiction |
+| `GET` | `/logs` | Journal des appels à `/predict` (clé d'API, voir [Logs](logs.md)) |
 | `GET` | `/docs` | Swagger UI (interface interactive) |
 | `GET` | `/redoc` | Documentation ReDoc |
 | `GET` | `/openapi.json` | Schéma OpenAPI (import Postman, génération de client) |

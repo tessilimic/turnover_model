@@ -54,6 +54,17 @@ Choix de validation :
 Une erreur (fichier absent, corrompu) empêche l'API de démarrer : elle est visible
 immédiatement dans les logs du Space, au lieu d'apparaître à la première requête.
 
+### Logs et traçabilité
+
+| Choix | Pourquoi |
+|---|---|
+| **Logs JSON sur la sortie standard** | Standard des conteneurs (Docker, Hugging Face les collectent) ; une ligne JSON se filtre avec `jq` et s'importe dans n'importe quel outil (ELK, Loki, Datadog). Fichier en option seulement. |
+| **`request_id` partout** (`contextvars`) | Relie la requête HTTP, le calcul du modèle, chaque requête SQL et la ligne du journal, sans passer l'identifiant de fonction en fonction. Repris de `X-Request-ID` pour suivre un appel depuis le système client. |
+| **Événements SQLAlchemy** | Toutes les requêtes SQL sont tracées sans modifier le code métier ; les valeurs des paramètres sont exclues (données RH). |
+| **Journal en base, séparé des logs** | Les logs techniques sont volatils et non structurés pour l'analyse ; la table `interactions` est interrogeable en SQL, reliée aux prédictions, et conservée selon une durée maîtrisée. |
+| **Écrit par un middleware** | Couvre aussi les appels refusés (422) ou en erreur (500), qui n'atteignent jamais le code de `/predict`. Un échec d'écriture du journal ne fait pas échouer la réponse. |
+| **`GET /logs` protégé par clé, désactivé par défaut** | Le Space est public et le journal contient des données RH : sans clé configurée, l'endpoint répond 403. Données d'entrée masquées sauf demande explicite. Alternative écartée : un fichier téléchargeable (pas de filtre, pas de contrôle d'accès). |
+
 ## Données
 
 ### PostgreSQL + SQLAlchemy (ORM)

@@ -72,6 +72,7 @@ nav:
       - Choix techniques: choix-techniques.md
       - Déploiement (CI/CD): deploiement.md
       - Tests: tests.md
+      - Logs et traçabilité: logs.md
       - Maintenance et mises à jour: maintenance.md
       - Contribuer: contribuer.md
       - Référence du code (Sphinx): reference.md

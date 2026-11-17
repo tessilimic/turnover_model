@@ -3,10 +3,149 @@
   "info": {
     "title": "Turnover API",
     "summary": "Prédiction du risque de départ des employés.",
-    "description": "\nEstime le **risque de départ** d'un employé à partir de son profil RH\n(SIRH, sondage interne, évaluations).\n\n* Modèle : Random Forest (scikit-learn), seuil de décision **0,41**,\n  choisi pour détecter un maximum de départs (F2).\n* Chaque prédiction est **enregistrée** en base (entrées et résultat).\n* Documentation complète : guide utilisateur, fiche du modèle, architecture\n  et maintenance dans le dossier `docs/` du dépôt (site MkDocs).\n",
-    "version": "0.3.0"
+    "description": "\nEstime le **risque de départ** d'un employé à partir de son profil RH\n(SIRH, sondage interne, évaluations).\n\n* Modèle : Random Forest (scikit-learn), seuil de décision **0,41**,\n  choisi pour détecter un maximum de départs (F2).\n* Chaque prédiction est **enregistrée** en base (entrées et résultat), et chaque\n  appel à `/predict`, même refusé, est tracé dans le journal des interactions\n  (consultable via `GET /logs`, avec une clé d'API).\n* Chaque réponse porte un en-tête **X-Request-ID**, présent dans tous les logs.\n* Documentation complète : guide utilisateur, fiche du modèle, architecture\n  et maintenance dans le dossier `docs/` du dépôt (site MkDocs).\n",
+    "version": "0.4.0"
   },
   "paths": {
+    "/logs": {
+      "get": {
+        "tags": [
+          "traçabilité"
+        ],
+        "summary": "Consulter le journal des interactions",
+        "description": "Renvoie les appels à `/predict`, du plus récent au plus ancien.\n\nProtégé par l'en-tête **X-API-Key** (bouton *Authorize* de Swagger).\nPar défaut, les données envoyées (`entrees`, données RH) ne sont pas renvoyées.",
+        "operationId": "lire_logs_logs_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Nombre de lignes",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Nombre de lignes"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Lignes à sauter (pagination)",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Lignes à sauter (pagination)"
+          },
+          {
+            "name": "code_http",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ex. 200, 422",
+              "title": "Code Http"
+            },
+            "description": "Ex. 200, 422"
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Une requête précise",
+              "title": "Request Id"
+            },
+            "description": "Une requête précise"
+          },
+          {
+            "name": "depuis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Date ISO 8601 minimale",
+              "title": "Depuis"
+            },
+            "description": "Date ISO 8601 minimale"
+          },
+          {
+            "name": "avec_entrees",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Inclure les données envoyées",
+              "default": false,
+              "title": "Avec Entrees"
+            },
+            "description": "Inclure les données envoyées"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageInteractions"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Clé absente ou invalide."
+          },
+          "403": {
+            "description": "Consultation désactivée (LOGS_API_KEY non défini)."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -329,6 +468,180 @@
           }
         ]
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InteractionLog": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "Identifiant de la requête (en-tête X-Request-ID)"
+          },
+          "cree_le": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Cree Le"
+          },
+          "methode": {
+            "type": "string",
+            "title": "Methode"
+          },
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "code_http": {
+            "type": "integer",
+            "title": "Code Http"
+          },
+          "duree_ms": {
+            "type": "number",
+            "title": "Duree Ms"
+          },
+          "client": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client",
+            "description": "Adresse IP du client"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "prediction_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prediction Id",
+            "description": "Prédiction produite (NULL si refusée)"
+          },
+          "version_api": {
+            "type": "string",
+            "title": "Version Api"
+          },
+          "empreinte_modele": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empreinte Modele",
+            "description": "Empreinte du modèle utilisé"
+          },
+          "erreurs": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Erreurs",
+            "description": "Erreurs de validation (si 422)"
+          },
+          "entrees": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entrees",
+            "description": "Corps reçu ; renvoyé seulement avec avec_entrees=true"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "request_id",
+          "cree_le",
+          "methode",
+          "route",
+          "code_http",
+          "duree_ms",
+          "client",
+          "user_agent",
+          "prediction_id",
+          "version_api",
+          "empreinte_modele",
+          "erreurs"
+        ],
+        "title": "InteractionLog",
+        "description": "Une ligne du journal des interactions (table ``interactions``)."
+      },
+      "PageInteractions": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Nombre total de lignes correspondant aux filtres"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InteractionLog"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "items"
+        ],
+        "title": "PageInteractions"
+      },
       "PredictionOutput": {
         "properties": {
           "id_prediction": {
@@ -362,6 +675,54 @@
           "depart_predit"
         ],
         "title": "PredictionOutput"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "type": "apiKey",
+        "description": "Clé de consultation des logs (variable LOGS_API_KEY du serveur).",
+        "in": "header",
+        "name": "X-API-Key"
       }
     }
   },
@@ -373,6 +734,10 @@
     {
       "name": "monitoring",
       "description": "Vérifier que le service est en ligne."
+    },
+    {
+      "name": "traçabilité",
+      "description": "Consulter le journal des appels au modèle (clé d'API requise)."
     }
   ]
 }

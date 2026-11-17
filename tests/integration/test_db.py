@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.schemas import EXEMPLE_EMPLOYE
 from src.db.init_db import charger_csv_en_base, lire_csv
-from src.db.models import Base, Employe, Prediction
+from src.db.models import Base, Employe, Interaction, Prediction
 from src.features import CIBLE, COLONNES_ENTREE
 
 
@@ -32,7 +32,7 @@ def test_lire_csv_fusionne_les_3_fichiers():
 
 # ---------- Schéma ----------
 
-@pytest.mark.parametrize("table", ["employes", "predictions"])
+@pytest.mark.parametrize("table", ["employes", "predictions", "interactions"])
 def test_colonnes_en_base_identiques_a_l_orm(engine, table):
     """Le schéma réellement créé (fichier SQL sur PostgreSQL) correspond aux modèles ORM."""
     en_base = {c["name"] for c in inspect(engine).get_columns(table)}
@@ -40,7 +40,7 @@ def test_colonnes_en_base_identiques_a_l_orm(engine, table):
     assert en_base == set(Base.metadata.tables[table].columns.keys())
 
 
-def test_cle_etrangere_entre_les_deux_tables(engine):
+def test_cle_etrangere_predictions_vers_employes(engine):
     (fk,) = inspect(engine).get_foreign_keys("predictions")
 
     assert fk["referred_table"] == "employes"
@@ -131,3 +131,54 @@ def test_suppression_employe_supprime_ses_predictions(session):
     session.commit()
 
     assert compter(session, Prediction.employe_id == id_employe) == 0
+
+
+# ---------- Journal des interactions ----------
+
+def nouvelle_interaction(request_id: str, **champs) -> Interaction:
+    return Interaction(**{
+        "request_id": request_id, "methode": "POST", "route": "/predict", "code_http": 200,
+        "duree_ms": 12.5, "version_api": "0.4.0", "entrees": dict(EXEMPLE_EMPLOYE),
+    } | champs)
+
+
+def test_interaction_stocke_le_json_tel_quel(session):
+    erreurs = [{"loc": ["body", "age"], "msg": "trop petit", "input": -1}]
+    session.add(nouvelle_interaction("json-1", code_http=422, erreurs=erreurs))
+    session.commit()
+
+    ligne = session.scalars(select(Interaction).where(Interaction.request_id == "json-1")).one()
+
+    assert ligne.entrees == EXEMPLE_EMPLOYE  # accents compris
+    assert ligne.erreurs == erreurs
+    assert ligne.cree_le is not None
+
+
+def test_request_id_unique(session):
+    session.add(nouvelle_interaction("doublon"))
+    session.commit()
+    session.add(nouvelle_interaction("doublon"))
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_supprimer_une_prediction_conserve_l_interaction(session):
+    employe = nouvel_employe(origine="prediction", depart=True, probabilite=0.8, seuil=0.41)
+    session.add(employe)
+    session.flush()
+    session.add(nouvelle_interaction("trace-1", prediction_id=employe.predictions[0].id))
+    session.commit()
+
+    session.delete(employe)  # supprime aussi sa prédiction (cascade)
+    session.commit()
+
+    ligne = session.scalars(select(Interaction).where(Interaction.request_id == "trace-1")).one()
+    assert ligne.prediction_id is None  # ON DELETE SET NULL : la trace reste
+
+
+def test_cle_etrangere_interactions_vers_predictions(engine):
+    (fk,) = inspect(engine).get_foreign_keys("interactions")
+
+    assert fk["referred_table"] == "predictions"
+    assert fk["constrained_columns"] == ["prediction_id"]

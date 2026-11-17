@@ -7,7 +7,7 @@ La référence de chaque module, classe et fonction est générée par **Sphinx*
 
 | Section | Modules |
 |---|---|
-| API | `app.main`, `app.schemas`, `app.model` |
+| API | `app.main`, `app.schemas`, `app.model`, `app.logs`, `app.tracabilite` |
 | Modèle | `src.features`, `src.train` |
 | Base de données | `src.db.models`, `src.db.session`, `src.db.init_db` |
 | Scripts | `scripts.export_openapi` |

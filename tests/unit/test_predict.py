@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from app import tracabilite
 from app.main import app
 from app.model import get_modele
 from app.schemas import EXEMPLE_EMPLOYE
@@ -47,22 +48,31 @@ class FausseSession:
 
 
 @pytest.fixture
-def predire():
-    """Appelle /predict avec un faux modèle de probabilité donnée."""
+def predire(monkeypatch):
+    """Appelle /predict avec un faux modèle de probabilité donnée.
+
+    Le journal des interactions est intercepté (``predire.interactions``) au lieu
+    d'être écrit en base.
+    """
     session = FausseSession()
     pipelines = []
+    interactions = []
+    monkeypatch.setattr(tracabilite, "enregistrer_interaction", interactions.append)
 
-    def _predire(proba: float, seuil: float = 0.41, employe: dict = EXEMPLE_EMPLOYE):
+    def _predire(proba: float, seuil: float = 0.41, employe: dict = EXEMPLE_EMPLOYE,
+                 headers: dict | None = None):
         pipeline = FauxPipeline(proba)
         pipelines.append(pipeline)
         app.dependency_overrides[get_modele] = lambda: {
             "pipeline": pipeline, "seuil": seuil, "colonnes_entree": COLONNES_ENTREE,
+            "empreinte": "abc123",
         }
         app.dependency_overrides[get_session] = lambda: session
-        return TestClient(app).post("/predict", json=employe)
+        return TestClient(app).post("/predict", json=employe, headers=headers)
 
     _predire.session = session
     _predire.pipelines = pipelines
+    _predire.interactions = interactions
     yield _predire
     app.dependency_overrides.clear()
 
@@ -133,3 +143,51 @@ def test_entree_invalide_ni_predite_ni_enregistree(predire):
     assert predire.pipelines[-1].recu is None
     assert predire.session.ajouts == []
     assert predire.session.commits == 0
+
+
+# ---------- Journal des interactions (traçabilité) ----------
+
+def test_reponse_porte_un_request_id(predire):
+    response = predire(0.5)
+
+    assert len(response.headers["X-Request-ID"]) == 36  # UUID généré
+
+
+def test_request_id_du_client_repris(predire):
+    response = predire(0.5, headers={"X-Request-ID": "appel-rh-0042"})
+
+    assert response.headers["X-Request-ID"] == "appel-rh-0042"
+    assert predire.interactions[-1]["request_id"] == "appel-rh-0042"
+
+
+def test_interaction_reussie_journalisee(predire):
+    predire(0.7)
+
+    (interaction,) = predire.interactions
+    assert interaction["route"] == "/predict"
+    assert interaction["methode"] == "POST"
+    assert interaction["code_http"] == 200
+    assert interaction["prediction_id"] == 42
+    assert interaction["entrees"] == EXEMPLE_EMPLOYE
+    assert interaction["erreurs"] is None
+    assert interaction["empreinte_modele"] == "abc123"
+    assert interaction["version_api"] == app.version
+    assert interaction["duree_ms"] >= 0
+
+
+def test_interaction_refusee_journalisee_avec_ses_erreurs(predire):
+    invalide = EXEMPLE_EMPLOYE | {"genre": "X"}
+
+    predire(0.5, employe=invalide)
+
+    (interaction,) = predire.interactions
+    assert interaction["code_http"] == 422
+    assert interaction["prediction_id"] is None
+    assert interaction["entrees"] == invalide  # le corps reçu, même invalide
+    assert [e["loc"] for e in interaction["erreurs"]] == [["body", "genre"]]
+
+
+def test_health_n_est_pas_journalise_en_base(predire):
+    TestClient(app).get("/health")
+
+    assert predire.interactions == []

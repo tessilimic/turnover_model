@@ -27,4 +27,5 @@ COPY --chown=user . .
 # Port expected by Spaces (app_port in README.md).
 EXPOSE 7860
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# --no-access-log: HTTP requests are already logged as JSON by the app (with request_id).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860", "--no-access-log"]
