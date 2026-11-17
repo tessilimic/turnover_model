@@ -17,7 +17,7 @@ placé ailleurs fait échouer pytest.
 pytest                    # tout, sur une base SQLite temporaire
 pytest -m unit            # unitaires seuls (quelques secondes, sans base)
 pytest -m "not functional"
-pytest --cov --cov-report=term-missing
+pytest --cov                # couverture, voir ci-dessous
 ```
 
 Sur PostgreSQL, comme en CI :
@@ -36,6 +36,40 @@ TEST_ROLES_PG=1 TEST_DATABASE_URL=... pytest
     `tests/conftest.py` remplace `DATABASE_URL` **avant** tout import de l'application :
     les tests ne peuvent pas toucher la base de développement, même si la variable est
     définie dans votre terminal. La base de test est vidée au début de chaque session.
+
+## Couverture des tests
+
+Mesurée par **pytest-cov** sur `app/` et `src/`, en comptant les **lignes et les
+branches** (chaque issue d'un `if` doit être exécutée). Configuration : `pyproject.toml`.
+
+| | Valeur |
+|---|---|
+| Couverture actuelle | **91 %** (lignes + branches, 245 tests sur PostgreSQL) |
+| Seuil minimal | **85 %** : la CI échoue en dessous (`fail_under`) |
+| Non couvert, volontairement | Points d'entrée en ligne de commande (`main()` de `src/train.py`, `init_db`), exercés manuellement |
+
+<p><a class="md-button md-button--primary" href="../coverage/">Ouvrir le rapport de couverture</a></p>
+
+Dans la CI, le job **Tests (pytest)** :
+
+1. cumule la couverture des trois catégories (unitaires, intégration, fonctionnels) ;
+2. affiche le tableau par fichier dans le **résumé de l'exécution** (onglet *Actions*) ;
+3. publie l'artefact **coverage-report** (rapport HTML navigable + `coverage.xml`), conservé 30 jours ;
+4. échoue si la couverture passe sous le seuil.
+
+À chaque fusion dans `main`, le rapport HTML est publié avec la documentation, sur
+<https://tessilimic.github.io/turnover_model/coverage/>.
+
+En local :
+
+```bash
+pytest --cov                          # tableau dans le terminal (lignes manquantes)
+pytest --cov --cov-report=html        # rapport navigable : ouvrir htmlcov/index.html
+```
+
+!!! tip "Relever le seuil"
+    Quand la couverture progresse durablement, relever `fail_under` dans `pyproject.toml`
+    pour éviter tout retour en arrière.
 
 ## Garde-fous notables
 

@@ -17,7 +17,8 @@ Déclenché à chaque push et chaque PR, et réutilisé par `deploy.yaml`.
 
 | Job | Étapes |
 |---|---|
-| **Tests** | Service PostgreSQL 17 ; tests unitaires, puis d'intégration, puis fonctionnels (couverture cumulée) |
+| **Tests** | Service PostgreSQL 17 ; tests unitaires, puis d'intégration, puis fonctionnels ; rapport de couverture (résumé, artefact *coverage-report*) et seuil minimal de 85 % |
+| **Security audit** | `pip-audit` (dépendances vulnérables), `bandit` (analyse du code) |
 | **Docker build** | Construit l'image (après les tests) |
 | **Documentation** | Vérifie l'export OpenAPI, `mkdocs build --strict`, `sphinx-build -W` ; publie le site en artefact |
 
@@ -35,7 +36,8 @@ Déclenché à chaque push sur `main` (donc à chaque fusion de PR), ou manuelle
       vers le dépôt du Space (fichiers LFS inclus) ;
     - **Documentation** : construit MkDocs et Sphinx, puis publie le site sur
       **GitHub Pages** : <https://tessilimic.github.io/turnover_model/>
-      (référence du code dans [`/code/`](https://tessilimic.github.io/turnover_model/code/)).
+      (référence du code dans [`/code/`](https://tessilimic.github.io/turnover_model/code/),
+      rapport de couverture dans [`/coverage/`](https://tessilimic.github.io/turnover_model/coverage/)).
 
 Les deux publications sont indépendantes : un échec du Space ne bloque pas la
 documentation. Deux déploiements ne se chevauchent jamais (le second attend le premier).

@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "Deployed to https://huggingface.co/spaces/${{ vars.HF_USERNAME }}/${{ vars.HF_SPACE_NAME }}" >> "$GITHUB_STEP_SUMMARY"
 
-  # Documentation site (MkDocs + Sphinx in /code/) on GitHub Pages.
+  # Documentation site (MkDocs + Sphinx in /code/ + coverage report in /coverage/) on GitHub Pages.
   # Independent from the Space: a failed Space push doesn't block the docs.
   # One-time setup: Settings > Pages > Source: "GitHub Actions".
   pages:
@@ -90,6 +90,16 @@ jobs:
         run: |
           mkdocs build --strict
           sphinx-build -W -b html sphinx site/code
+
+      # Coverage report produced by the CI job of this same run (reusable workflow).
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report
+
+      - name: Add coverage report to the site
+        run: cp -r coverage-report/htmlcov site/coverage
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

@@ -107,7 +107,7 @@ probabilité et une décision, et **enregistre chaque prédiction** en base de d
 | API | [![FastAPI][fastapi-shield]][fastapi-url] Pydantic, Uvicorn |
 | Données | [![PostgreSQL][postgres-shield]][postgres-url] SQLAlchemy (ORM), psycopg, SQLite |
 | Déploiement | [![Docker][docker-shield]][docker-url] [![Hugging Face][hf-shield]][hf-url] GitHub Actions, Git LFS |
-| Qualité | pytest, pytest-cov, Dependabot |
+| Qualité | pytest, pytest-cov (couverture lignes + branches, seuil 85 %), pip-audit, bandit, Dependabot |
 | Documentation | Swagger (OpenAPI), Markdown, MkDocs Material, Sphinx |
 
 Les raisons de chaque choix sont détaillées dans [Choix techniques](docs/choix-techniques.md).
@@ -341,6 +341,7 @@ Détails, vérification et retour arrière : [Déploiement](docs/deploiement.md)
 |---|---|---|
 | **MkDocs** | Guides, modèle, architecture, maintenance | [tessilimic.github.io/turnover_model](https://tessilimic.github.io/turnover_model/) |
 | **Sphinx** | Référence du code (docstrings) | [tessilimic.github.io/turnover_model/code](https://tessilimic.github.io/turnover_model/code/) |
+| **pytest-cov** | Rapport de couverture des tests (91 %, seuil 85 %) | [tessilimic.github.io/turnover_model/coverage](https://tessilimic.github.io/turnover_model/coverage/) |
 | **Swagger** | Référence interactive de l'API | [sur l'API en ligne](https://tessilimic-turnover-api.hf.space/docs), et [dans le site MkDocs](https://tessilimic.github.io/turnover_model/api/) |
 | **Markdown** | Ce README et les pages de `docs/` | Directement sur GitHub ([docs/](docs/index.md)) |
 

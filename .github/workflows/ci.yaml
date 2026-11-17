@@ -56,7 +56,7 @@ jobs:
           pip install -r requirements.txt
 
       # One step per category (markers set from tests/<category>/),
-      # coverage accumulated across steps and reported at the end.
+      # coverage (lines + branches, see pyproject.toml) accumulated across steps.
       - name: Unit tests
         run: pytest -m unit --cov --cov-report=
 
@@ -64,7 +64,35 @@ jobs:
         run: pytest -m integration --cov --cov-append --cov-report=
 
       - name: Functional tests (API over HTTP)
-        run: pytest -m functional --cov --cov-append --cov-report=term-missing
+        run: pytest -m functional --cov --cov-append --cov-report=
+
+      # Reports are produced even if a test step failed (partial coverage helps to debug).
+      - name: Coverage report (HTML, XML, job summary)
+        if: ${{ !cancelled() }}
+        run: |
+          [ -f .coverage ] || { echo "No coverage data (tests did not run)."; exit 0; }
+          coverage xml --fail-under=0
+          coverage html --fail-under=0
+          {
+            echo "## Couverture des tests"
+            echo
+            coverage report --format=markdown --fail-under=0
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            htmlcov/
+            coverage.xml
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Quality gate: fails below [tool.coverage.report] fail_under in pyproject.toml.
+      - name: Coverage threshold
+        run: coverage report
 
   docker:
     name: Docker build
