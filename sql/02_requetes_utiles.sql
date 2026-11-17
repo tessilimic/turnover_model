@@ -1,5 +1,5 @@
 -- Requêtes de consultation (lecture seule).
--- Exemple : docker compose exec -T db psql -U turnover -d turnover < sql/02_requetes_utiles.sql
+-- Exemple : docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/02_requetes_utiles.sql
 
 -- 1. Volume par origine
 SELECT origine,

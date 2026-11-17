@@ -61,6 +61,7 @@ pinned: false
     </li>
     <li><a href="#usage">Utilisation</a></li>
     <li><a href="#the-model">Le modèle</a></li>
+    <li><a href="#security">Sécurité</a></li>
     <li><a href="#deployment">Déploiement</a></li>
     <li><a href="#documentation">Documentation</a></li>
     <li><a href="#roadmap">Feuille de route</a></li>
@@ -82,10 +83,12 @@ probabilité et une décision, et **enregistre chaque prédiction** en base de d
 
 * **Objectif** : aider les RH à cibler les actions de rétention, en détectant un maximum
   de départs (81 % des départs détectés sur le jeu de test).
-* **Industrialisé** : pipeline complet exporté, API validée, base de données, 184 tests,
+* **Industrialisé** : pipeline complet exporté, API validée, base de données, 245 tests,
   CI/CD jusqu'au déploiement sur Hugging Face Spaces.
 * **Documenté** : Swagger, site MkDocs, référence du code Sphinx, protocole de maintenance.
 * **Traçable** : logs JSON reliés par `X-Request-ID`, journal de chaque appel au modèle en base (`GET /logs`).
+* **Sécurisé** : comptes et jetons JWT, rôles `rh` / `auditeur` / `admin`, mots de passe Argon2id,
+  rôles PostgreSQL à privilèges minimaux, aucun secret dans le dépôt.
 
 > [!WARNING]
 > Outil d'**aide à la décision** : environ 7 alertes sur 10 sont des fausses alertes.
@@ -167,20 +170,30 @@ Détails : [Architecture](docs/architecture.md).
    source .venv/bin/activate      # Windows : .venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    ```
-3. Démarrer PostgreSQL et charger le jeu de données
+3. Créer le fichier des secrets, puis remplacer chaque `a-remplacer` par une valeur aléatoire
+   (`python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+   ```sh
+   cp .env.example .env
+   ```
+4. Démarrer PostgreSQL ; créer les tables, les rôles d'accès et charger le jeu de données
    ```sh
    docker compose up -d db
    python -m src.db.init_db
    ```
-4. (Optionnel) Réentraîner le modèle depuis la base
+5. Créer les comptes de l'API (mot de passe demandé sans écho)
+   ```sh
+   python -m app.utilisateurs creer marie.rh --role rh
+   python -m app.utilisateurs creer paul.audit --role auditeur
+   ```
+6. (Optionnel) Réentraîner le modèle depuis la base (rôle en lecture seule)
    ```sh
    python -m src.train
    ```
-5. Lancer l'API, puis ouvrir http://localhost:7860/docs
+7. Lancer l'API, puis ouvrir http://127.0.0.1:7860/docs et cliquer sur **Authorize**
    ```sh
    docker compose up -d --build
    ```
-6. Vérifier
+8. Vérifier
    ```sh
    pytest
    ```
@@ -189,14 +202,20 @@ Détails : [Architecture](docs/architecture.md).
 
 ### Configuration
 
-| Variable | Défaut | Rôle |
-|---|---|---|
-| `DATABASE_URL` | `postgresql+psycopg://turnover:turnover@localhost:5433/turnover` | Base de données (API, `init_db`, `train`) |
-| `MODEL_PATH` | `model/pipeline.joblib` | Modèle chargé par l'API |
-| `LOGS_API_KEY` | *(aucune : `/logs` désactivé)* | Clé de consultation du journal (`GET /logs`, en-tête `X-API-Key`) |
-| `LOG_LEVEL` | `INFO` | Niveau des logs techniques |
-| `LOG_FILE` | *(aucun)* | Écrit aussi les logs dans ce fichier (rotation) |
-| `TEST_DATABASE_URL` | SQLite temporaire | Base utilisée par les tests |
+Tous les secrets sont dans `.env` (jamais versionné ; modèle : `.env.example`).
+
+| Variable | Rôle |
+|---|---|
+| `DATABASE_URL` | Connexion de l'API (rôle PostgreSQL `turnover_api`) |
+| `ML_DATABASE_URL` | Connexion de l'entraînement (rôle `turnover_ml`, lecture seule) |
+| `ADMIN_DATABASE_URL` | Connexion propriétaire (`init_db`, gestion des comptes) |
+| `POSTGRES_PASSWORD`, `TURNOVER_*_DB_PASSWORD` | Mots de passe de la base et des rôles |
+| `JWT_SECRET` | Signature des jetons (≥ 32 caractères) |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Compte admin créé au démarrage (Hugging Face, SQLite) |
+| `MODEL_PATH` | Modèle chargé par l'API (`model/pipeline.joblib`) |
+| `LOG_LEVEL` | Niveau des logs techniques |
+| `LOG_FILE` | Écrit aussi les logs dans ce fichier (rotation) |
+| `TEST_DATABASE_URL` | Base utilisée par les tests (SQLite temporaire par défaut) |
 
 Guide complet : [Installation et configuration](docs/installation.md).
 
@@ -207,14 +226,22 @@ Guide complet : [Installation et configuration](docs/installation.md).
 
 ## Utilisation
 
-Le plus simple : **Swagger UI**, bouton *Try it out* (exemple pré-rempli) :
+Le plus simple : **Swagger UI**, bouton **Authorize** (identifiant et mot de passe), puis
+*Try it out* (exemple pré-rempli) :
 
 * en ligne : https://tessilimic-turnover-api.hf.space/docs
   (Space : [huggingface.co/spaces/tessilimic/turnover_api](https://huggingface.co/spaces/tessilimic/turnover_api)) ;
-* en local : http://localhost:7860/docs.
+* en local : http://127.0.0.1:7860/docs.
 
 ```sh
+# 1. Se connecter (jeton valable 30 minutes)
+curl -X POST http://localhost:7860/token \
+     --data-urlencode "username=marie.rh" --data-urlencode "password=..."
+# {"access_token": "eyJhbGciOi...", "token_type": "bearer", "expires_in": 1800}
+
+# 2. Prédire
 curl -X POST http://localhost:7860/predict \
+     -H "Authorization: Bearer eyJhbGciOi..." \
      -H "Content-Type: application/json" \
      --data-binary @employe.json
 ```
@@ -228,16 +255,21 @@ En Python :
 ```python
 import httpx
 
-reponse = httpx.post("http://localhost:7860/predict", json=employe)  # 24 champs
+jeton = httpx.post("http://localhost:7860/token",
+                   data={"username": "marie.rh", "password": mot_de_passe}).json()["access_token"]
+reponse = httpx.post("http://localhost:7860/predict", json=employe,  # 24 champs
+                     headers={"Authorization": f"Bearer {jeton}"})
 print(reponse.json()["probabilite_depart"])
 ```
 
-| Route | Rôle |
-|---|---|
-| `POST /predict` | Prédit et enregistre (24 champs obligatoires, validés) |
-| `GET /health` | État du service |
-| `GET /logs` | Journal des appels à `/predict` (en-tête `X-API-Key`, voir [Logs](docs/logs.md)) |
-| `GET /docs`, `/redoc` | Documentation interactive |
+| Route | Rôle | Accès |
+|---|---|---|
+| `POST /token` | Connexion : identifiant + mot de passe → jeton | public |
+| `POST /predict` | Prédit et enregistre (24 champs obligatoires, validés) | `rh`, `admin` |
+| `GET /logs` | Journal des appels à `/predict` (voir [Logs](docs/logs.md)) | `auditeur`, `admin` |
+| `GET /moi` | Compte connecté | authentifié |
+| `GET /health` | État du service | public |
+| `GET /docs`, `/redoc` | Documentation interactive | public |
 
 Les 24 champs, leurs valeurs acceptées et les erreurs : [Utiliser l'API](docs/utilisation.md).
 
@@ -259,6 +291,25 @@ Fiche complète : [Fiche technique](docs/modele.md) et [Performances](docs/perfo
 
 <p align="right">(<a href="#readme-top">retour en haut</a>)</p>
 
+<!-- SECURITY -->
+<a id="security"></a>
+
+## Sécurité
+
+| Couche | Mesures |
+|---|---|
+| **Authentification** | OAuth2 *password* + jetons JWT (HS256, 30 min) ; mots de passe hachés en **Argon2id** ; verrouillage après 5 échecs ; pas d'énumération des comptes |
+| **Autorisation** | Rôles `rh` (prédire), `auditeur` (journal), `admin` (tout), vérifiés à chaque requête ; compte relu en base (désactivation immédiate) |
+| **Base de données** | Un rôle PostgreSQL par programme (`turnover_api`, `turnover_ml`, `turnover_auditeur`) : l'API ne peut ni modifier ni supprimer l'historique, ni relire les données RH ; l'auditeur ne voit pas les données personnelles |
+| **Secrets** | Uniquement dans `.env` (ignoré par Git) ou les secrets GitHub / Hugging Face ; aucune valeur par défaut dans le code |
+| **Échanges** | HTTPS, en-têtes de sécurité (CSP, `nosniff`, `DENY`, `no-store`), validation stricte des entrées |
+| **Contrôles** | `pip-audit` et `bandit` en CI, Dependabot, tests des rôles et des droits réels en base |
+
+Méthodes, matrice des droits, bonnes pratiques et liste de contrôle :
+[Sécurité et accès](docs/securite.md).
+
+<p align="right">(<a href="#readme-top">retour en haut</a>)</p>
+
 <!-- DEPLOYMENT -->
 <a id="deployment"></a>
 
@@ -275,6 +326,7 @@ flowchart LR
   puis pousse le code vers le Space (qui reconstruit l'image) et publie la documentation
   sur GitHub Pages.
 * **Configuration GitHub** : secret `HF_TOKEN`, variables `HF_USERNAME` et `HF_SPACE_NAME`.
+* **Secrets du Space** : `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`.
 
 Détails, vérification et retour arrière : [Déploiement](docs/deploiement.md).
 
@@ -313,10 +365,11 @@ mkdocs serve                                   # http://127.0.0.1:8000
 - [x] Logs structurés et journal des interactions (traçabilité)
 - [x] Tests unitaires, d'intégration et fonctionnels
 - [x] Documentation et protocole de maintenance, publiés sur GitHub Pages
+- [x] Authentification, rôles et gestion fine des accès à la base
 - [ ] Import incrémental des nouveaux départs observés
 - [ ] Réévaluation de la régression logistique ; modèle sans variables sensibles
 - [ ] Explication SHAP de chaque prédiction
-- [ ] Base PostgreSQL hébergée, authentification de l'API
+- [ ] Base PostgreSQL hébergée ; authentification d'entreprise (SSO/OIDC)
 
 Protocole de mise à jour régulière : [Maintenance](docs/maintenance.md).
 

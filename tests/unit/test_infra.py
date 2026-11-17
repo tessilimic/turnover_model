@@ -13,19 +13,34 @@ from app.model import get_modele
 
 # ---------- URL de la base ----------
 
-def test_url_par_defaut_vise_le_postgresql_de_docker_compose(monkeypatch):
+def test_aucune_adresse_par_defaut_dans_le_code(monkeypatch):
+    """Pas d'identifiants en dur : sans configuration, erreur explicite."""
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("ML_DATABASE_URL", raising=False)
 
-    url = db_session.get_database_url()
-
-    assert url.startswith("postgresql+psycopg://")
-    assert "localhost:5433" in url
+    with pytest.raises(RuntimeError, match=r"\.env\.example"):
+        db_session.get_database_url("ML_DATABASE_URL")
 
 
 def test_url_lue_dans_la_variable_d_environnement(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite:///autre.db")
 
     assert db_session.get_database_url() == "sqlite:///autre.db"
+
+
+def test_chaque_usage_a_sa_propre_adresse(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://turnover_api@h/db")
+    monkeypatch.setenv("ML_DATABASE_URL", "postgresql://turnover_ml@h/db")
+
+    assert db_session.get_database_url("ML_DATABASE_URL") == "postgresql://turnover_ml@h/db"
+    assert db_session.get_database_url() == "postgresql://turnover_api@h/db"
+
+
+def test_repli_sur_database_url(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///commune.db")
+    monkeypatch.delenv("ADMIN_DATABASE_URL", raising=False)
+
+    assert db_session.get_database_url("ADMIN_DATABASE_URL") == "sqlite:///commune.db"
 
 
 # ---------- Création / suppression du schéma selon la base ----------

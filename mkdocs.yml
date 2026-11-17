@@ -73,6 +73,7 @@ nav:
       - Déploiement (CI/CD): deploiement.md
       - Tests: tests.md
       - Logs et traçabilité: logs.md
+      - Sécurité et accès: securite.md
       - Maintenance et mises à jour: maintenance.md
       - Contribuer: contribuer.md
       - Référence du code (Sphinx): reference.md

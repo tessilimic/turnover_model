@@ -11,15 +11,31 @@ URL de base :
 |---|---|---|
 | `GET` | `/` | Redirige vers `/docs` |
 | `GET` | `/health` | État du service |
-| `POST` | `/predict` | Prédit le départ d'un employé et enregistre la prédiction |
-| `GET` | `/logs` | Journal des appels à `/predict` (clé d'API, voir [Logs](logs.md)) |
+| `POST` | `/token` | Connexion : identifiant + mot de passe → jeton (public) |
+| `GET` | `/moi` | Compte connecté |
+| `POST` | `/predict` | Prédit le départ d'un employé et enregistre la prédiction (rôle rh ou admin) |
+| `GET` | `/logs` | Journal des appels à `/predict` (rôle auditeur ou admin, voir [Logs](logs.md)) |
 | `GET` | `/docs` | Swagger UI (interface interactive) |
 | `GET` | `/redoc` | Documentation ReDoc |
 | `GET` | `/openapi.json` | Schéma OpenAPI (import Postman, génération de client) |
 
+## S'authentifier
+
+Toutes les routes, sauf `/health` et la documentation, exigent un **jeton**.
+Les comptes sont créés par un administrateur (voir [Sécurité](securite.md#gerer-les-comptes)).
+
+| Rôle | Peut |
+|---|---|
+| `rh` | Prédire (`POST /predict`) |
+| `auditeur` | Consulter le journal (`GET /logs`) |
+| `admin` | Tout |
+
+Le jeton s'obtient avec `POST /token` et vaut **30 minutes**. Après 5 mots de passe
+erronés, le compte est verrouillé 15 minutes.
+
 ## Le plus simple : Swagger UI
 
-1. Ouvrir `/docs`.
+1. Ouvrir `/docs`, cliquer sur **Authorize**, saisir identifiant et mot de passe.
 2. Déplier **POST /predict**, cliquer sur **Try it out**.
 3. Le corps est pré-rempli avec un exemple valide : le modifier, puis **Execute**.
 
@@ -85,7 +101,14 @@ Réponse (`200`) :
 === "curl (Linux / macOS)"
 
     ```bash
+    # 1. Jeton (le mot de passe est lu sans écho)
+    read -rs MDP
+    JETON=$(curl -s -X POST http://localhost:7860/token \
+         --data-urlencode "username=marie.rh" --data-urlencode "password=$MDP" | jq -r .access_token)
+
+    # 2. Prédiction
     curl -X POST http://localhost:7860/predict \
+         -H "Authorization: Bearer $JETON" \
          -H "Content-Type: application/json" \
          --data-binary @employe.json
     ```
@@ -93,8 +116,15 @@ Réponse (`200`) :
 === "PowerShell"
 
     ```powershell
+    $identifiants = Get-Credential   # fenêtre de saisie, mot de passe masqué
+    $jeton = (Invoke-RestMethod -Uri http://localhost:7860/token -Method Post -Body @{
+        username = $identifiants.UserName
+        password = $identifiants.GetNetworkCredential().Password
+    }).access_token
+
     $body = Get-Content employe.json -Raw -Encoding UTF8
     Invoke-RestMethod -Uri http://localhost:7860/predict -Method Post `
+        -Headers @{ Authorization = "Bearer $jeton" } `
         -ContentType "application/json; charset=utf-8" `
         -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
     ```
@@ -102,11 +132,19 @@ Réponse (`200`) :
 === "Python"
 
     ```python
+    import getpass
+
     import httpx
+
+    API = "http://localhost:7860"
+    jeton = httpx.post(f"{API}/token", data={
+        "username": "marie.rh", "password": getpass.getpass("Mot de passe : "),
+    }).raise_for_status().json()["access_token"]
 
     employe = {"age": 41, "genre": "F", ...}  # les 24 champs
 
-    reponse = httpx.post("http://localhost:7860/predict", json=employe)
+    reponse = httpx.post(f"{API}/predict", json=employe,
+                         headers={"Authorization": f"Bearer {jeton}"})
     reponse.raise_for_status()
     resultat = reponse.json()
     print(f"Risque de départ : {resultat['probabilite_depart']:.0%}",
@@ -159,6 +197,8 @@ celles vues pendant l'entraînement.
 
 | Code | Cause | Enregistré en base ? |
 |---|---|---|
+| `401` | Pas de jeton, jeton invalide ou expiré (en obtenir un nouveau) ; sur `/token` : identifiants incorrects ou compte verrouillé | Trace dans le journal (sauf `/token`), sans les données |
+| `403` | Rôle insuffisant (ex. un auditeur sur `/predict`) | Trace, sans les données |
 | `422` | Champ manquant, valeur hors liste ou hors bornes, mauvais type, champ inconnu, JSON mal formé | Non |
 | `405` | Mauvaise méthode (ex. `GET /predict`) | Non |
 | `400` | Corps illisible (souvent un problème d'encodage) | Non |
@@ -183,5 +223,5 @@ Chaque appel réussi crée une ligne dans `employes` (entrées) et une dans `pre
 (résultat). Exemples de requêtes : `sql/02_requetes_utiles.sql`.
 
 ```bash
-docker compose exec -T db psql -U turnover -d turnover < sql/02_requetes_utiles.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/02_requetes_utiles.sql
 ```

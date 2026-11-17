@@ -31,6 +31,9 @@ flowchart TB
 | Schémas | `app/schemas.py` | Validation des entrées/sorties (Pydantic), exemple Swagger |
 | Chargement du modèle | `app/model.py` | Lecture unique du `.joblib` (cache), `MODEL_PATH`, empreinte |
 | Logs | `app/logs.py` | Logs JSON, `request_id` ajouté à chaque ligne |
+| Authentification | `app/auth.py` | Mots de passe (Argon2id), jetons JWT, verrouillage, contrôle des rôles |
+| Comptes | `app/utilisateurs.py` | Gestion des comptes en ligne de commande |
+| En-têtes de sécurité | `app/securite.py` | `nosniff`, `DENY`, CSP, `no-store`... |
 | Traçabilité | `app/tracabilite.py` | Middleware (`X-Request-ID`, durée), journal `interactions`, `GET /logs` |
 | Features | `src/features.py` | Listes de colonnes (source de vérité) et features créées |
 | Entraînement | `src/train.py` | Lecture en base, pipeline, évaluation, export |
@@ -82,6 +85,15 @@ flowchart LR
 erDiagram
     employes ||--o{ predictions : "employe_id (ON DELETE CASCADE)"
     predictions |o--o{ interactions : "prediction_id (ON DELETE SET NULL)"
+    utilisateurs {
+        int id PK
+        varchar identifiant UK
+        varchar mot_de_passe_hash "Argon2id uniquement"
+        varchar role "admin | rh | auditeur"
+        bool actif
+        int echecs_connexion
+        timestamptz verrouille_jusqu_a
+    }
     interactions {
         int id PK
         varchar request_id UK "en-tête X-Request-ID"
@@ -91,6 +103,7 @@ erDiagram
         jsonb erreurs "si 422"
         int prediction_id FK "NULL si refusée"
         varchar empreinte_modele
+        varchar utilisateur "compte à l'origine de l'appel"
         timestamptz cree_le
     }
     employes {

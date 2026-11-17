@@ -32,7 +32,7 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, OrdinalEnc
 from sqlalchemy import Engine, select
 
 from src.db.models import Employe, Prediction
-from src.db.session import get_engine
+from src.db.session import creer_engine, get_database_url
 from src.features import (
     BINAIRES,
     COLONNES_ENTREE,
@@ -77,7 +77,7 @@ def charger_donnees(engine: Engine) -> pd.DataFrame:
         .order_by(Employe.id_employee)
     )
     with engine.connect() as conn:
-        return pd.read_sql(requete, conn)
+        return pd.read_sql_query(requete, conn)
 
 
 def separer_x_y(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
@@ -147,7 +147,7 @@ def evaluer(pipeline: Pipeline, X: pd.DataFrame, y: pd.Series, seuil: float) -> 
 
 
 def main() -> None:
-    engine = get_engine()
+    engine = creer_engine(get_database_url("ML_DATABASE_URL"))  # lecture seule
     print(f"Données lues dans : {engine.url.render_as_string(hide_password=True)}")
     X, y = separer_x_y(charger_donnees(engine))
     if X.empty:

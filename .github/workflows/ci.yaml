@@ -35,6 +35,8 @@ jobs:
           --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql+psycopg://turnover:turnover@localhost:5432/turnover_test
+      # Throwaway CI database: role tests may (re)define the application roles' passwords.
+      TEST_ROLES_PG: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,6 +78,29 @@ jobs:
 
       - name: Build image
         run: docker build -t turnover-api:ci .
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install audit tools
+        run: pip install pip-audit bandit
+
+      # Known vulnerabilities (PyPI advisory database) in the pinned dependencies.
+      - name: Dependency audit (pip-audit)
+        run: pip-audit -r requirements.txt
+
+      # Static analysis of the application code (hardcoded secrets, injections, ...).
+      - name: Code scan (bandit)
+        run: bandit -r app src scripts
 
   docs:
     name: Documentation

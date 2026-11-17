@@ -1,14 +1,13 @@
-"""Logs structurés et contrôle d'accès à /logs, sans base de données."""
+"""Logs structurés et identifiant de requête, sans base de données."""
 
 import json
 import logging
 
 import pytest
-from fastapi import HTTPException
 
 from app import logs
 from app.logs import FormateurJson, configurer_logs, request_id_courant
-from app.tracabilite import request_id_depuis, verifier_cle_logs
+from app.tracabilite import request_id_depuis
 
 
 def enregistrement(message="bonjour", **extra) -> logging.LogRecord:
@@ -126,30 +125,3 @@ def test_request_id_client_invalide_remplace(fourni):
 
     assert genere != fourni
     assert len(genere) == 36
-
-
-# ---------- Accès à /logs ----------
-
-def test_logs_desactives_sans_cle_configuree(monkeypatch):
-    monkeypatch.delenv("LOGS_API_KEY", raising=False)
-
-    with pytest.raises(HTTPException) as exc:
-        verifier_cle_logs("peu-importe")
-
-    assert exc.value.status_code == 403
-
-
-@pytest.mark.parametrize("cle", [None, "", "mauvaise-cle"])
-def test_logs_refuses_avec_cle_absente_ou_fausse(monkeypatch, cle):
-    monkeypatch.setenv("LOGS_API_KEY", "la-bonne-cle")
-
-    with pytest.raises(HTTPException) as exc:
-        verifier_cle_logs(cle)
-
-    assert exc.value.status_code == 401
-
-
-def test_logs_autorises_avec_la_bonne_cle(monkeypatch):
-    monkeypatch.setenv("LOGS_API_KEY", "la-bonne-cle")
-
-    assert verifier_cle_logs("la-bonne-cle") is None

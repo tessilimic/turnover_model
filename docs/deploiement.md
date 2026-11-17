@@ -66,8 +66,16 @@ vérifications **Tests (pytest)**, **Docker build** et **Documentation**.
 - SDK **Docker**, matériel **CPU basic** (gratuit).
 - L'en-tête du `README.md` (`sdk: docker`, `app_port: 7860`) configure le Space.
 - L'application écoute sur `0.0.0.0:7860` avec l'utilisateur UID 1000 (`Dockerfile`).
-- Logs : onglet **Logs** du Space. Pour activer `GET /logs`, ajouter un secret
-  `LOGS_API_KEY` (clé longue et aléatoire) dans *Settings → Variables and secrets*.
+- **Secrets du Space** (*Settings → Variables and secrets*, type *Secret*) :
+
+    | Secret | Rôle |
+    |---|---|
+    | `JWT_SECRET` | Signature des jetons (≥ 32 caractères aléatoires). Sans lui, une clé aléatoire est générée à chaque démarrage. |
+    | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Compte `admin` recréé à chaque démarrage (base SQLite éphémère) |
+
+    Sans `ADMIN_USERNAME` / `ADMIN_PASSWORD`, aucun compte n'existe sur le Space : seules
+    les routes publiques (`/health`, `/docs`) répondent. Voir [Sécurité](securite.md).
+- Logs : onglet **Logs** du Space.
 - Base : SQLite non persistante par défaut. Pour une base persistante, ajouter un secret
   `DATABASE_URL` dans *Settings → Variables and secrets* du Space (PostgreSQL hébergé).
 

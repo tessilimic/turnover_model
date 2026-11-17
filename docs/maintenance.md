@@ -8,17 +8,19 @@ répondre, mais les prédictions deviennent moins fiables à mesure que l'entrep
 
 | Fréquence | Action | Responsable | Durée |
 |---|---|---|---|
-| **Continue** | CI sur chaque PR (tests, Docker, documentation) | Automatique | — |
+| **Continue** | CI sur chaque PR (tests, Docker, documentation, audit de sécurité) | Automatique | — |
 | **Hebdomadaire** | Revue des PR Dependabot (dépendances, actions, image Docker) | Développeur | 15 min |
 | **Mensuelle** | [Suivi des prédictions](#suivi-mensuel) (`sql/03_suivi.sql`) | Data scientist | 30 min |
 | **Trimestrielle** | [Réentraînement](#reentrainement) avec les nouveaux départs observés | Data scientist | 1/2 journée |
+| **Trimestrielle** | [Revue des comptes et des accès](#securite) | Administrateur | 30 min |
+| **Annuelle** | [Rotation des secrets](#securite) | Administrateur | 1 h |
 | **Annuelle** | [Revue complète](#revue-annuelle) : notebook, hyperparamètres, seuil, équité | Data scientist + RH | 2-3 jours |
 | **Sur événement** | Voir [déclencheurs](#declencheurs-hors-calendrier) | Selon le cas | — |
 
 ## Suivi mensuel
 
 ```bash
-docker compose exec -T db psql -U turnover -d turnover < sql/03_suivi.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/03_suivi.sql
 ```
 
 | Indicateur | Valeur de référence | Alerte si |
@@ -115,6 +117,25 @@ des PR pour les paquets Python, les actions GitHub et l'image Docker
 | Python (image Docker, CI) | Mettre à jour `Dockerfile` et `ci.yaml` ensemble |
 | PostgreSQL | Mettre à jour `docker-compose.yml` et `ci.yaml` ensemble |
 
+## Sécurité
+
+| Fréquence | Action |
+|---|---|
+| Trimestrielle | `python -m app.utilisateurs lister` : désactiver les comptes inutilisés (dernière connexion > 90 jours) et ceux des personnes parties ; vérifier que chaque rôle est justifié |
+| Trimestrielle | Revoir les refus d'accès et verrouillages dans les logs (`auth.refus`, `auth.verrouillage`, `auth.acces_refuse`) |
+| Annuelle, ou immédiatement en cas de fuite | Rotation des secrets (ci-dessous) |
+| À chaque PR Dependabot de sécurité | Traiter sous 7 jours (job *Security audit*) |
+
+**Rotation des secrets**
+
+| Secret | Procédure | Effet |
+|---|---|---|
+| `JWT_SECRET` | Nouvelle valeur dans `.env` / secrets du Space, redémarrer l'API | Tous les jetons sont invalidés : chacun se reconnecte |
+| Mots de passe des rôles (`TURNOVER_*_DB_PASSWORD`) | Nouvelle valeur dans `.env`, `python -m src.db.init_db`, redémarrer l'API | Aucune interruption hors redémarrage |
+| `POSTGRES_PASSWORD` | `ALTER ROLE` en tant que propriétaire, puis `.env` | — |
+| `HF_TOKEN` | Nouveau jeton Hugging Face, mise à jour du secret GitHub, révocation de l'ancien | — |
+| Mot de passe d'un compte | `python -m app.utilisateurs mot-de-passe <identifiant>` | — |
+
 ## Maintenir la documentation
 
 | Changement | Mise à jour |
@@ -135,5 +156,6 @@ menu ou une docstring invalide bloque la PR.
 - [ ] Explication de chaque prédiction dans l'API (valeurs SHAP).
 - [ ] Base PostgreSQL hébergée pour conserver les prédictions de production.
 - [ ] Migrations de schéma (Alembic) dès que la base de production contient des données.
-- [ ] Authentification de l'API (clé d'API) avant tout usage avec des données réelles.
+- [x] Authentification de l'API (jetons JWT, rôles) et rôles PostgreSQL à privilèges minimaux.
+- [ ] Authentification d'entreprise (SSO/OIDC) et limitation du débit par client.
 - [x] Publication de la documentation sur GitHub Pages.

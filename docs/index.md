@@ -22,7 +22,7 @@ flowchart LR
 | **Utilisateur** de l'API | [Utiliser l'API](utilisation.md), puis la [référence Swagger](api/index.md) |
 | **Data scientist** | [Fiche technique du modèle](modele.md) et [performances](performances.md) |
 | **Développeur** | [Installation](installation.md), [architecture](architecture.md), [choix techniques](choix-techniques.md), [tests](tests.md) |
-| **Mainteneur** | [Maintenance et mises à jour](maintenance.md), [déploiement](deploiement.md) |
+| **Mainteneur** | [Maintenance et mises à jour](maintenance.md), [déploiement](deploiement.md), [sécurité](securite.md) |
 
 ## En bref
 
@@ -35,6 +35,7 @@ flowchart LR
 | API | FastAPI, Swagger UI sur `/docs` |
 | Base de données | PostgreSQL (local, Docker), SQLite en repli |
 | Traçabilité | Logs JSON (request_id), journal des appels en base, `GET /logs` |
+| Sécurité | Comptes (Argon2id), jetons JWT, rôles `rh` / `auditeur` / `admin`, rôles PostgreSQL à privilèges minimaux |
 | Déploiement | Docker sur Hugging Face Spaces, CI/CD GitHub Actions |
 
 !!! warning "Usage prévu"

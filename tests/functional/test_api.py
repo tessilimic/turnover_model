@@ -14,8 +14,9 @@ from src.features import COLONNES_ENTREE
 
 
 @pytest.fixture(scope="module")
-def client(engine):
-    with TestClient(app) as c:  # "with" : exécute le chargement du modèle au démarrage
+def client(engine, auth):
+    # "with" : exécute le démarrage (modèle, base) ; connecté avec le rôle rh par défaut.
+    with TestClient(app, headers=auth["rh"]) as c:
         yield c
 
 

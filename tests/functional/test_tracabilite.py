@@ -11,19 +11,16 @@ from app.main import app
 from app.schemas import EXEMPLE_EMPLOYE
 from src.db.models import Interaction, Prediction
 
-CLE = "cle-de-test"
-
-
 @pytest.fixture(scope="module")
-def client(engine):
-    with TestClient(app) as c:
+def client(engine, auth):
+    with TestClient(app, headers=auth["rh"]) as c:  # rôle rh par défaut
         yield c
 
 
 @pytest.fixture
-def avec_cle(monkeypatch):
-    monkeypatch.setenv("LOGS_API_KEY", CLE)
-    return {"X-API-Key": CLE}
+def avec_cle(auth):
+    """En-têtes d'un auditeur (seul rôle, avec admin, autorisé à lire le journal)."""
+    return auth["auditeur"]
 
 
 def interaction(engine, request_id: str) -> Interaction:
@@ -75,13 +72,21 @@ def test_json_mal_forme_trace(client, engine):
 
 # ---------- GET /logs ----------
 
-def test_logs_proteges_par_cle(client, monkeypatch):
-    monkeypatch.delenv("LOGS_API_KEY", raising=False)
-    assert client.get("/logs").status_code == 403
+def test_logs_reserves_aux_auditeurs_et_admins(client, auth):
+    sans_jeton = {"Authorization": ""}
+    assert client.get("/logs", headers=sans_jeton).status_code == 401
+    assert client.get("/logs", headers={"Authorization": "Bearer faux"}).status_code == 401
+    assert client.get("/logs", headers=auth["rh"]).status_code == 403
+    assert client.get("/logs", headers=auth["auditeur"]).status_code == 200
+    assert client.get("/logs", headers=auth["admin"]).status_code == 200
 
-    monkeypatch.setenv("LOGS_API_KEY", CLE)
-    assert client.get("/logs").status_code == 401
-    assert client.get("/logs", headers={"X-API-Key": "faux"}).status_code == 401
+
+def test_utilisateur_enregistre_dans_le_journal(client, avec_cle):
+    client.post("/predict", json=EXEMPLE_EMPLOYE, headers={"X-Request-ID": "qui-1"})
+
+    page = client.get("/logs", params={"request_id": "qui-1"}, headers=avec_cle).json()
+
+    assert page["items"][0]["utilisateur"] == "rh.test"
 
 
 def test_logs_retrouve_un_appel_par_request_id(client, avec_cle):

@@ -1,5 +1,5 @@
 -- Suivi mensuel des prédictions (lecture seule). Voir docs/maintenance.md.
--- docker compose exec -T db psql -U turnover -d turnover < sql/03_suivi.sql
+-- docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/03_suivi.sql
 
 -- 1. Prédictions par mois : volume, probabilité moyenne, part de départs prédits
 SELECT date_trunc('month', cree_le)::date            AS mois,

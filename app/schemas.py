@@ -114,6 +114,7 @@ class InteractionLog(BaseModel):
     prediction_id: int | None = Field(description="Prédiction produite (NULL si refusée)")
     version_api: str
     empreinte_modele: str | None = Field(description="Empreinte du modèle utilisé")
+    utilisateur: str | None = Field(description="Compte authentifié à l'origine de l'appel")
     erreurs: list | None = Field(description="Erreurs de validation (si 422)")
     entrees: dict | None = Field(
         default=None, description="Corps reçu ; renvoyé seulement avec avec_entrees=true"
@@ -125,3 +126,21 @@ class PageInteractions(BaseModel):
     limit: int
     offset: int
     items: list[InteractionLog]
+
+
+class Jeton(BaseModel):
+    """Réponse de POST /token (format OAuth2)."""
+
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int = Field(description="Durée de validité, en secondes")
+
+
+class UtilisateurCourant(BaseModel):
+    """Réponse de GET /moi."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    identifiant: str
+    role: Literal["admin", "rh", "auditeur"]
+    derniere_connexion: datetime | None

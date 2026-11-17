@@ -10,17 +10,28 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import pandas as pd
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.auth import (
+    acces_prediction,
+    authentifier,
+    creer_jeton,
+    duree_jeton,
+    get_secret_jwt,
+    utilisateur_courant,
+)
 from app.logs import configurer_logs
 from app.model import get_modele
-from app.schemas import EmployeInput, PredictionOutput
+from app.schemas import EmployeInput, Jeton, PredictionOutput, UtilisateurCourant
+from app.securite import entetes_securite
 from app.tracabilite import erreur_validation, routeur_logs, tracer_requetes
-from src.db.models import Employe, Prediction
-from src.db.session import creer_schema, get_engine, get_session
+from app.utilisateurs import creer_admin_initial
+from src.db.models import Employe, Prediction, Utilisateur
+from src.db.session import creer_schema, get_engine, get_session, tables_manquantes
 
 configurer_logs()
 journal = logging.getLogger("turnover.api")
@@ -31,19 +42,23 @@ Estime le **risque de départ** d'un employé à partir de son profil RH
 
 * Modèle : Random Forest (scikit-learn), seuil de décision **0,41**,
   choisi pour détecter un maximum de départs (F2).
+* **Authentification** : obtenir un jeton avec `POST /token` (bouton *Authorize*),
+  puis l'envoyer dans l'en-tête `Authorization: Bearer <jeton>`.
+  Rôles : `rh` (prédire), `auditeur` (consulter le journal), `admin` (tout).
 * Chaque prédiction est **enregistrée** en base (entrées et résultat), et chaque
   appel à `/predict`, même refusé, est tracé dans le journal des interactions
-  (consultable via `GET /logs`, avec une clé d'API).
+  (`GET /logs`), avec le compte à l'origine de l'appel.
 * Chaque réponse porte un en-tête **X-Request-ID**, présent dans tous les logs.
-* Documentation complète : guide utilisateur, fiche du modèle, architecture
-  et maintenance dans le dossier `docs/` du dépôt (site MkDocs).
+* Documentation complète : guide utilisateur, fiche du modèle, architecture,
+  sécurité et maintenance dans le dossier `docs/` du dépôt (site MkDocs).
 """
 
 TAGS = [
-    {"name": "prédiction", "description": "Estimer le risque de départ d'un employé."},
-    {"name": "monitoring", "description": "Vérifier que le service est en ligne."},
+    {"name": "authentification", "description": "Obtenir un jeton d'accès."},
+    {"name": "prédiction", "description": "Estimer le risque de départ d'un employé (rôle rh ou admin)."},
     {"name": "traçabilité", "description": "Consulter le journal des appels au modèle "
-                                           "(clé d'API requise)."},
+                                           "(rôle auditeur ou admin)."},
+    {"name": "monitoring", "description": "Vérifier que le service est en ligne (public)."},
 ]
 
 EXEMPLE_422 = {
@@ -54,18 +69,36 @@ EXEMPLE_422 = {
         "input": "Astronaute",
     }]
 }
+REPONSES_AUTH = {
+    401: {"description": "Non authentifié : jeton absent, invalide ou expiré."},
+    403: {"description": "Rôle insuffisant pour cette action."},
+}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Au démarrage : charge le modèle et crée les tables si besoin.
+    """Au démarrage : charge le modèle, prépare la clé des jetons, vérifie la base.
 
-    Une erreur (modèle absent, base injoignable) est ainsi visible tout de
-    suite, et la première requête n'attend pas le chargement du modèle.
+    * **PostgreSQL** : l'API (rôle ``turnover_api``) n'a pas le droit de créer des
+      tables ; elle vérifie seulement que ``init_db`` a été lancé.
+    * **SQLite** (Hugging Face, sans administrateur) : l'API crée les tables et le
+      compte administrateur initial (``ADMIN_USERNAME`` / ``ADMIN_PASSWORD``).
+
+    Une erreur de configuration empêche le démarrage : elle est visible tout de suite.
     """
     journal.info("démarrage de l'API", extra={"evenement": "api.demarrage", "version": app.version})
     get_modele()
-    creer_schema(get_engine())  # idempotent
+    get_secret_jwt()
+    engine = get_engine()
+    if engine.dialect.name == "sqlite":
+        creer_schema(engine)
+        with Session(engine) as session:
+            if creer_admin_initial(session):
+                journal.info("compte administrateur initial créé",
+                             extra={"evenement": "auth.admin_initial"})
+    elif manquantes := tables_manquantes(engine):
+        raise RuntimeError(f"Tables absentes ({', '.join(manquantes)}) : "
+                           "lancer python -m src.db.init_db")
     yield
     journal.info("arrêt de l'API", extra={"evenement": "api.arret"})
 
@@ -74,10 +107,12 @@ app = FastAPI(
     title="Turnover API",
     summary="Prédiction du risque de départ des employés.",
     description=DESCRIPTION,
-    version="0.4.0",
+    version="1.0.0",
     openapi_tags=TAGS,
     lifespan=lifespan,
 )
+# Le dernier middleware ajouté s'exécute en premier : la traçabilité englobe tout.
+app.middleware("http")(entetes_securite)
 app.middleware("http")(tracer_requetes)
 app.add_exception_handler(RequestValidationError, erreur_validation)
 app.include_router(routeur_logs)
@@ -96,8 +131,44 @@ def root() -> RedirectResponse:
     responses={200: {"content": {"application/json": {"example": {"status": "ok"}}}}},
 )
 def health() -> dict[str, str]:
-    """Renvoie `{"status": "ok"}` si l'API répond."""
+    """Renvoie `{"status": "ok"}` si l'API répond. Public, sans donnée."""
     return {"status": "ok"}
+
+
+@app.post(
+    "/token",
+    tags=["authentification"],
+    summary="Se connecter (obtenir un jeton)",
+    responses={401: {"description": "Identifiant ou mot de passe incorrect, ou compte "
+                                    "désactivé ou verrouillé (raison non précisée)."}},
+)
+def connexion(
+    formulaire: Annotated[OAuth2PasswordRequestForm, Depends()],
+    session: Annotated[Session, Depends(get_session)],
+) -> Jeton:
+    """Échange un identifiant et un mot de passe contre un jeton JWT.
+
+    Le jeton est valable 30 minutes (par défaut) et s'envoie dans l'en-tête
+    `Authorization: Bearer <jeton>`. Après 5 échecs, le compte est verrouillé
+    15 minutes.
+    """
+    utilisateur = authentifier(session, formulaire.username, formulaire.password)
+    if utilisateur is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Identifiant ou mot de passe incorrect.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return Jeton(
+        access_token=creer_jeton(utilisateur.identifiant, utilisateur.role),
+        expires_in=int(duree_jeton().total_seconds()),
+    )
+
+
+@app.get("/moi", tags=["authentification"], summary="Compte connecté",
+         responses={401: REPONSES_AUTH[401]})
+def moi(utilisateur: Annotated[Utilisateur, Depends(utilisateur_courant)]) -> UtilisateurCourant:
+    """Identifiant et rôle du compte associé au jeton."""
+    return UtilisateurCourant.model_validate(utilisateur)
 
 
 @app.post(
@@ -112,6 +183,7 @@ def health() -> dict[str, str]:
                 "seuil": 0.41, "depart_predit": True,
             }}},
         },
+        **REPONSES_AUTH,
         422: {
             "description": "Entrée invalide (champ manquant, valeur hors liste ou hors bornes, "
                            "champ inconnu). Rien n'est enregistré.",
@@ -122,10 +194,13 @@ def health() -> dict[str, str]:
 def predict(
     employe: EmployeInput,
     request: Request,
+    utilisateur: Annotated[Utilisateur, Depends(acces_prediction)],
     modele: Annotated[dict, Depends(get_modele)],
     session: Annotated[Session, Depends(get_session)],
 ) -> PredictionOutput:
     """Estime la probabilité de départ d'un employé et enregistre la prédiction.
+
+    Réservé aux rôles **rh** et **admin**.
 
     - **probabilite_depart** : probabilité estimée par le modèle (0 à 1).
     - **depart_predit** : `true` si la probabilité atteint le seuil (0,41).
@@ -149,7 +224,8 @@ def predict(
         extra={"evenement": "modele.prediction", "probabilite": round(proba, 4),
                "seuil": seuil, "depart_predit": depart,
                "duree_ms": round((time.perf_counter() - debut) * 1000, 2),
-               "empreinte_modele": modele.get("empreinte")},
+               "empreinte_modele": modele.get("empreinte"),
+               "utilisateur": utilisateur.identifiant},
     )
 
     prediction = Prediction(origine="prediction", depart=depart, probabilite=proba, seuil=seuil)

@@ -1,5 +1,5 @@
 -- Consultation du journal des interactions (table interactions). Voir docs/logs.md.
--- docker compose exec -T db psql -U turnover -d turnover < sql/04_journal.sql
+-- docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/04_journal.sql
 
 -- 1. Derniers appels, avec la prédiction produite
 SELECT i.cree_le, i.request_id, i.code_http, i.duree_ms,

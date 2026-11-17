@@ -10,10 +10,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import tracabilite
+from app.auth import utilisateur_courant
 from app.main import app
 from app.model import get_modele
 from app.schemas import EXEMPLE_EMPLOYE
-from src.db.models import Employe
+from src.db.models import Employe, Utilisateur
 from src.db.session import get_session
 from src.features import COLONNES_ENTREE
 
@@ -28,6 +29,10 @@ class FauxPipeline:
     def predict_proba(self, X: pd.DataFrame):
         self.recu = X
         return np.array([[1 - self.proba, self.proba]])  # même format que scikit-learn
+
+
+#: Compte authentifié simulé (rôle autorisé à prédire).
+FAUX_COMPTE = Utilisateur(identifiant="rh.unitaire", role="rh", actif=True)
 
 
 class FausseSession:
@@ -68,6 +73,7 @@ def predire(monkeypatch):
             "empreinte": "abc123",
         }
         app.dependency_overrides[get_session] = lambda: session
+        app.dependency_overrides[utilisateur_courant] = lambda: FAUX_COMPTE
         return TestClient(app).post("/predict", json=employe, headers=headers)
 
     _predire.session = session

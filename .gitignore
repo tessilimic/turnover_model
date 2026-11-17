@@ -10,3 +10,8 @@ htmlcov/
 .idea/
 *.db
 site/
+
+# Secrets (voir .env.example)
+.env
+.env.*
+!.env.example
