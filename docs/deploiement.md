@@ -110,3 +110,4 @@ après le revert.
 | Push vers le Space refusé (fichier binaire) | Fichier binaire hors LFS | Vérifier `.gitattributes` et `git lfs ls-files` |
 | Space en erreur au démarrage | Modèle absent (pointeur LFS) ou version de scikit-learn différente | Logs du Space ; voir [Maintenance](maintenance.md) |
 | Premier appel très lent | Space en veille (inactivité) | Normal sur l'offre gratuite |
+| Onglet **App** du Space vide (icône de page triste) | La page refuse d'être affichée dans le cadre de huggingface.co | Les pages de documentation autorisent `https://huggingface.co` (`frame-ancestors`, voir `app/securite.py`) ; vérifier `FRAME_ANCESTORS` s'il est défini |
