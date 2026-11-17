@@ -26,8 +26,14 @@ docker compose exec -T db psql -U turnover -d turnover < sql/03_suivi.sql
 | Probabilité moyenne prédite | 0,42 (jeu d'entraînement ; élevée car le modèle est pondéré) | Écart > 0,10 sur un mois |
 | Part de départs prédits | 43 % (jeu d'entraînement) | < 30 % ou > 60 % |
 | Profil des employés évalués (âge, revenu, heures sup.) | Requête 3 de `03_suivi.sql` | Écart marqué avec l'entraînement |
-| Volume d'appels | — | Chute brutale (API indisponible ?) |
+| Volume d'appels | `sql/04_journal.sql` (requête 2) | Chute brutale (API indisponible ?) |
+| Part d'appels refusés (422) et champs en cause | `sql/04_journal.sql` (requêtes 2 et 3) | > 10 % : client mal configuré, ou nouvelle modalité à apprendre |
+| Durée au 95e percentile | `sql/04_journal.sql` (requête 2) | > 500 ms |
+| Erreurs 500, `db.erreur`, `interaction.erreur` | Logs techniques | Toute occurrence |
 | Départs réels vs prédits (quand connus) | Recall ≈ 0,8 | Recall < 0,7 |
+
+Chaque mois également : **purger** le journal des interactions au-delà de 12 mois
+(requête 5 de `sql/04_journal.sql`), voir [Logs et traçabilité](logs.md#conservation-et-donnees-personnelles).
 
 Une alerte déclenche un **réentraînement anticipé** et une analyse des données récentes
 (nouveau poste, nouvelle politique salariale...).

@@ -1,5 +1,6 @@
 """Format des données d'entrée et de sortie de l'API (validé par Pydantic)."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -94,3 +95,33 @@ class PredictionOutput(BaseModel):
     probabilite_depart: float = Field(ge=0, le=1, description="Probabilité de départ estimée")
     seuil: float = Field(description="Seuil de décision du modèle")
     depart_predit: bool = Field(description="True si probabilite_depart >= seuil")
+
+
+class InteractionLog(BaseModel):
+    """Une ligne du journal des interactions (table ``interactions``)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    request_id: str = Field(description="Identifiant de la requête (en-tête X-Request-ID)")
+    cree_le: datetime
+    methode: str
+    route: str
+    code_http: int
+    duree_ms: float
+    client: str | None = Field(description="Adresse IP du client")
+    user_agent: str | None
+    prediction_id: int | None = Field(description="Prédiction produite (NULL si refusée)")
+    version_api: str
+    empreinte_modele: str | None = Field(description="Empreinte du modèle utilisé")
+    erreurs: list | None = Field(description="Erreurs de validation (si 422)")
+    entrees: dict | None = Field(
+        default=None, description="Corps reçu ; renvoyé seulement avec avec_entrees=true"
+    )
+
+
+class PageInteractions(BaseModel):
+    total: int = Field(description="Nombre total de lignes correspondant aux filtres")
+    limit: int
+    offset: int
+    items: list[InteractionLog]

@@ -29,7 +29,9 @@ flowchart TB
 |---|---|---|
 | API | `app/main.py` | Routes FastAPI, démarrage (chargement du modèle, création des tables) |
 | Schémas | `app/schemas.py` | Validation des entrées/sorties (Pydantic), exemple Swagger |
-| Chargement du modèle | `app/model.py` | Lecture unique du `.joblib` (cache), `MODEL_PATH` |
+| Chargement du modèle | `app/model.py` | Lecture unique du `.joblib` (cache), `MODEL_PATH`, empreinte |
+| Logs | `app/logs.py` | Logs JSON, `request_id` ajouté à chaque ligne |
+| Traçabilité | `app/tracabilite.py` | Middleware (`X-Request-ID`, durée), journal `interactions`, `GET /logs` |
 | Features | `src/features.py` | Listes de colonnes (source de vérité) et features créées |
 | Entraînement | `src/train.py` | Lecture en base, pipeline, évaluation, export |
 | Base de données | `src/db/` | Modèles ORM, connexion, chargement du jeu initial |
@@ -79,6 +81,18 @@ flowchart LR
 ```mermaid
 erDiagram
     employes ||--o{ predictions : "employe_id (ON DELETE CASCADE)"
+    predictions |o--o{ interactions : "prediction_id (ON DELETE SET NULL)"
+    interactions {
+        int id PK
+        varchar request_id UK "en-tête X-Request-ID"
+        int code_http
+        float duree_ms
+        jsonb entrees "corps reçu, même invalide"
+        jsonb erreurs "si 422"
+        int prediction_id FK "NULL si refusée"
+        varchar empreinte_modele
+        timestamptz cree_le
+    }
     employes {
         int id PK
         int id_employee UK "NULL si appel API"

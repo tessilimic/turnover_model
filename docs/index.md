@@ -34,6 +34,7 @@ flowchart LR
 | Performances (test) | ROC AUC 0,77 · 81 % des départs détectés · 29 % des alertes justifiées |
 | API | FastAPI, Swagger UI sur `/docs` |
 | Base de données | PostgreSQL (local, Docker), SQLite en repli |
+| Traçabilité | Logs JSON (request_id), journal des appels en base, `GET /logs` |
 | Déploiement | Docker sur Hugging Face Spaces, CI/CD GitHub Actions |
 
 !!! warning "Usage prévu"

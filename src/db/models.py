@@ -1,9 +1,14 @@
 """Modèles ORM (SQLAlchemy). Miroir de sql/01_schema.sql."""
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+# JSONB sous PostgreSQL (indexable, compact), JSON ailleurs (SQLite).
+JsonPortable = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Base(DeclarativeBase):
@@ -88,3 +93,30 @@ class Prediction(Base):
             sqlite_where=text("origine = 'observation'"),
         ),
     )
+
+
+class Interaction(Base):
+    """Journal d'un appel à /predict (réussi, refusé ou en erreur)."""
+
+    __tablename__ = "interactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[str] = mapped_column(String(64), unique=True)
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    methode: Mapped[str] = mapped_column(String(10))
+    route: Mapped[str] = mapped_column(String(200))
+    code_http: Mapped[int]
+    duree_ms: Mapped[float]
+    client: Mapped[str | None] = mapped_column(String(100))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    entrees: Mapped[Any | None] = mapped_column(JsonPortable)
+    erreurs: Mapped[Any | None] = mapped_column(JsonPortable)
+    prediction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("predictions.id", ondelete="SET NULL")
+    )
+    version_api: Mapped[str] = mapped_column(String(20))
+    empreinte_modele: Mapped[str | None] = mapped_column(String(16))
+
+    prediction: Mapped[Prediction | None] = relationship()
+
+    __table_args__ = (Index("ix_interactions_cree_le", "cree_le"),)

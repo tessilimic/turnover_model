@@ -23,6 +23,8 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://turnover:turnover@db:5432/turnover
+      # Local development key for GET /logs (header X-API-Key). Override with LOGS_API_KEY.
+      LOGS_API_KEY: ${LOGS_API_KEY:-dev-logs-key}
     ports:
       - "7860:7860"
     depends_on:

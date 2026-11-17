@@ -82,9 +82,10 @@ probabilité et une décision, et **enregistre chaque prédiction** en base de d
 
 * **Objectif** : aider les RH à cibler les actions de rétention, en détectant un maximum
   de départs (81 % des départs détectés sur le jeu de test).
-* **Industrialisé** : pipeline complet exporté, API validée, base de données, 140 tests,
+* **Industrialisé** : pipeline complet exporté, API validée, base de données, 184 tests,
   CI/CD jusqu'au déploiement sur Hugging Face Spaces.
 * **Documenté** : Swagger, site MkDocs, référence du code Sphinx, protocole de maintenance.
+* **Traçable** : logs JSON reliés par `X-Request-ID`, journal de chaque appel au modèle en base (`GET /logs`).
 
 > [!WARNING]
 > Outil d'**aide à la décision** : environ 7 alertes sur 10 sont des fausses alertes.
@@ -192,6 +193,9 @@ Détails : [Architecture](docs/architecture.md).
 |---|---|---|
 | `DATABASE_URL` | `postgresql+psycopg://turnover:turnover@localhost:5433/turnover` | Base de données (API, `init_db`, `train`) |
 | `MODEL_PATH` | `model/pipeline.joblib` | Modèle chargé par l'API |
+| `LOGS_API_KEY` | *(aucune : `/logs` désactivé)* | Clé de consultation du journal (`GET /logs`, en-tête `X-API-Key`) |
+| `LOG_LEVEL` | `INFO` | Niveau des logs techniques |
+| `LOG_FILE` | *(aucun)* | Écrit aussi les logs dans ce fichier (rotation) |
 | `TEST_DATABASE_URL` | SQLite temporaire | Base utilisée par les tests |
 
 Guide complet : [Installation et configuration](docs/installation.md).
@@ -232,6 +236,7 @@ print(reponse.json()["probabilite_depart"])
 |---|---|
 | `POST /predict` | Prédit et enregistre (24 champs obligatoires, validés) |
 | `GET /health` | État du service |
+| `GET /logs` | Journal des appels à `/predict` (en-tête `X-API-Key`, voir [Logs](docs/logs.md)) |
 | `GET /docs`, `/redoc` | Documentation interactive |
 
 Les 24 champs, leurs valeurs acceptées et les erreurs : [Utiliser l'API](docs/utilisation.md).
@@ -305,6 +310,7 @@ mkdocs serve                                   # http://127.0.0.1:8000
 - [x] Pipeline CI/CD et déploiement sur Hugging Face Spaces
 - [x] API FastAPI avec validation et Swagger
 - [x] Base PostgreSQL, enregistrement des prédictions
+- [x] Logs structurés et journal des interactions (traçabilité)
 - [x] Tests unitaires, d'intégration et fonctionnels
 - [x] Documentation et protocole de maintenance, publiés sur GitHub Pages
 - [ ] Import incrémental des nouveaux départs observés

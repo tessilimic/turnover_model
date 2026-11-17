@@ -75,6 +75,9 @@ L'application se configure par **variables d'environnement** :
 |---|---|---|
 | `DATABASE_URL` | `postgresql+psycopg://turnover:turnover@localhost:5433/turnover` | Base utilisée par l'API, `init_db` et `train` |
 | `MODEL_PATH` | `model/pipeline.joblib` | Modèle chargé par l'API |
+| `LOGS_API_KEY` | *(aucune : `/logs` désactivé)* | Clé de consultation du journal (`GET /logs`, en-tête `X-API-Key`) |
+| `LOG_LEVEL` | `INFO` | Niveau des logs techniques |
+| `LOG_FILE` | *(aucun)* | Écrit aussi les logs dans ce fichier (rotation) |
 | `TEST_DATABASE_URL` | *(vide : SQLite temporaire)* | Base utilisée par les tests |
 
 Valeurs selon l'environnement :
