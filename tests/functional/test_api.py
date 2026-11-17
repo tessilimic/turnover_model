@@ -1,4 +1,4 @@
-from typing import get_args
+"""Tests fonctionnels : l'API appelée en HTTP, avec le vrai modèle et une vraie base."""
 
 import pandas as pd
 import pytest
@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.main import app
 from app.model import get_modele
-from app.schemas import EXEMPLE_EMPLOYE, EmployeInput
+from app.schemas import EXEMPLE_EMPLOYE
 from src.db.models import Employe, Prediction
-from src.features import BINAIRES, COLONNES_ENTREE, NOMINALES, ORDINALES
+from src.features import COLONNES_ENTREE
 
 
 @pytest.fixture(scope="module")
@@ -130,7 +130,8 @@ def test_requete_invalide_n_enregistre_rien(client, engine, employe):
         assert session.scalar(select(func.count()).select_from(Employe)) == avant
 
 
-# ---------- /predict : validation des entrées (422) ----------
+# ---------- /predict : réponse HTTP aux entrées invalides (422) ----------
+# Le détail des règles de validation est testé dans tests/unit/test_schemas.py.
 
 def test_predict_refuse_champ_manquant(client, employe):
     del employe["age"]
@@ -143,15 +144,7 @@ def test_predict_refuse_champ_manquant(client, employe):
 
 @pytest.mark.parametrize(
     ("champ", "valeur"),
-    [
-        ("poste", "Astronaute"),               # modalité inconnue
-        ("genre", "X"),
-        ("satisfaction_employee_equipe", 5),   # hors échelle 1-4
-        ("age", -3),
-        ("revenu_mensuel", 0),
-        ("augementation_salaire_precedente", "11 %"),  # attendu : 11
-        ("age", "quarante"),
-    ],
+    [("poste", "Astronaute"), ("satisfaction_employee_equipe", 5), ("age", "quarante")],
 )
 def test_predict_refuse_valeur_invalide(client, employe, champ, valeur):
     employe[champ] = valeur
@@ -162,33 +155,13 @@ def test_predict_refuse_valeur_invalide(client, employe, champ, valeur):
     assert response.json()["detail"][0]["loc"] == ["body", champ]
 
 
-def test_predict_refuse_champ_inconnu(client, employe):
-    employe["salaire"] = 3000  # faute de frappe : refusée plutôt qu'ignorée
-
-    response = client.post("/predict", json=employe)
+def test_predict_refuse_json_mal_forme(client):
+    response = client.post(
+        "/predict", content="{pas du json", headers={"Content-Type": "application/json"}
+    )
 
     assert response.status_code == 422
 
 
-# ---------- Cohérence schéma <-> modèle ----------
-
-def test_schema_contient_les_colonnes_du_modele():
-    assert set(EmployeInput.model_fields) == set(COLONNES_ENTREE)
-    assert get_modele()["colonnes_entree"] == COLONNES_ENTREE
-
-
-def test_modalites_du_schema_identiques_a_celles_apprises():
-    """Une modalité acceptée par l'API doit avoir été vue à l'entraînement."""
-    prep = get_modele()["pipeline"].named_steps["prep"]
-    apprises = {}
-    for nom, encodeur, colonnes in prep.transformers_:
-        if nom in ("nom", "bin", "ord"):
-            apprises |= {c: set(cats) for c, cats in zip(colonnes, encodeur.categories_)}
-
-    for colonne in NOMINALES + BINAIRES + ORDINALES:
-        acceptees = set(get_args(EmployeInput.model_fields[colonne].annotation))
-        assert acceptees == apprises[colonne], colonne
-
-
-def test_exemple_swagger_valide():
-    EmployeInput(**EXEMPLE_EMPLOYE)
+def test_methode_get_non_autorisee_sur_predict(client):
+    assert client.get("/predict").status_code == 405

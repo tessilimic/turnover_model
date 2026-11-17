@@ -1,15 +1,30 @@
+"""Tests d'intégration : modèle exporté et données lues dans la vraie base."""
+
 from pathlib import Path
+from typing import get_args
 
 import joblib
 import pandas as pd
 import pytest
 import sklearn
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
+from sqlalchemy.orm import Session
 
+from app.schemas import EXEMPLE_EMPLOYE, EmployeInput
 from src.db.init_db import lire_csv
-from src.features import CIBLE, COLONNES_ENTREE
-from src.train import charger_donnees, separer_x_y
+from src.db.models import Employe, Prediction
+from src.features import BINAIRES, CIBLE, COLONNES_ENTREE, NOMINALES, ORDINALES
+from src.train import (
+    RANDOM_STATE,
+    SEUIL,
+    charger_donnees,
+    construire_pipeline,
+    evaluer,
+    separer_x_y,
+)
 
-CHEMIN_MODELE = Path(__file__).resolve().parents[1] / "model" / "pipeline.joblib"
+CHEMIN_MODELE = Path(__file__).resolve().parents[2] / "model" / "pipeline.joblib"
 
 
 @pytest.fixture(scope="module")
@@ -21,6 +36,8 @@ def artefact() -> dict:
 def donnees(engine):
     return separer_x_y(charger_donnees(engine))
 
+
+# ---------- Données d'entraînement lues en base ----------
 
 def test_charger_donnees(donnees):
     X, y = donnees
@@ -43,11 +60,6 @@ def test_donnees_en_base_identiques_aux_csv(donnees):
 
 
 def test_predictions_api_exclues_de_l_entrainement(engine, donnees):
-    from sqlalchemy.orm import Session
-
-    from app.schemas import EXEMPLE_EMPLOYE
-    from src.db.models import Employe, Prediction
-
     with Session(engine) as session:
         session.add(Employe(**EXEMPLE_EMPLOYE, predictions=[
             Prediction(origine="prediction", depart=True, probabilite=0.9, seuil=0.41)
@@ -58,6 +70,8 @@ def test_predictions_api_exclues_de_l_entrainement(engine, donnees):
 
     assert len(X) == len(donnees[0]) == 1470
 
+
+# ---------- Modèle exporté ----------
 
 def test_artefact_contient_pipeline_et_seuil(artefact):
     assert {"pipeline", "seuil", "colonnes_entree", "versions"} <= artefact.keys()
@@ -80,10 +94,6 @@ def test_pipeline_predit_des_probabilites(artefact, donnees):
 
 
 def test_entrainement_reproduit_le_notebook(donnees):
-    from sklearn.model_selection import train_test_split
-
-    from src.train import RANDOM_STATE, SEUIL, construire_pipeline, evaluer
-
     X, y = donnees
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, stratify=y, random_state=RANDOM_STATE
@@ -98,9 +108,26 @@ def test_entrainement_reproduit_le_notebook(donnees):
 
 def test_performance_minimale(artefact, donnees):
     # Garde-fou contre un modèle cassé (entraîné sur toutes les données).
-    from sklearn.metrics import roc_auc_score
-
     X, y = donnees
     proba = artefact["pipeline"].predict_proba(X)[:, 1]
 
     assert roc_auc_score(y, proba) > 0.75
+
+
+# ---------- Cohérence schéma de l'API <-> modèle ----------
+
+def test_schema_contient_les_colonnes_du_modele(artefact):
+    assert set(EmployeInput.model_fields) == set(artefact["colonnes_entree"])
+
+
+def test_modalites_du_schema_identiques_a_celles_apprises(artefact):
+    """Une modalité acceptée par l'API doit avoir été vue à l'entraînement."""
+    prep = artefact["pipeline"].named_steps["prep"]
+    apprises = {}
+    for nom, encodeur, colonnes in prep.transformers_:
+        if nom in ("nom", "bin", "ord"):
+            apprises |= {c: set(cats) for c, cats in zip(colonnes, encodeur.categories_)}
+
+    for colonne in NOMINALES + BINAIRES + ORDINALES:
+        acceptees = set(get_args(EmployeInput.model_fields[colonne].annotation))
+        assert acceptees == apprises[colonne], colonne
