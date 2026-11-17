@@ -1,0 +1,153 @@
+"""Entraîne le modèle de turnover et l'exporte dans model/.
+
+Usage : python -m src.train
+
+Reprend le modèle final du notebook (hyperparamètres et seuil retenus) :
+1. évaluation sur un jeu de test (80/20 stratifié, comme le notebook) ;
+2. réentraînement sur toutes les données, puis export.
+"""
+
+import json
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+import sklearn
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    average_precision_score,
+    balanced_accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, OrdinalEncoder
+
+from src.features import (
+    BINAIRES,
+    CIBLE,
+    COLONNES_CONSTANTES,
+    COLONNES_CORRELEES,
+    COLONNES_ENTREE,
+    NOMINALES,
+    NUMERIQUES,
+    ORDINALES,
+    ORDRE_DEPLACEMENT,
+    ajouter_features,
+)
+
+RACINE = Path(__file__).resolve().parents[1]
+DOSSIER_DONNEES = RACINE / "data"
+DOSSIER_MODELE = RACINE / "model"
+
+RANDOM_STATE = 42
+SEUIL = 0.41  # F2 max en validation croisée (notebook)
+HYPERPARAMETRES = {
+    "n_estimators": 300,
+    "max_depth": 4,
+    "min_samples_leaf": 20,
+    "max_features": "sqrt",
+    "class_weight": "balanced_subsample",
+}
+
+
+def charger_donnees(dossier: Path = DOSSIER_DONNEES) -> pd.DataFrame:
+    """Fusionne et nettoie les 3 fichiers sources (1 ligne par employé)."""
+    sirh = pd.read_csv(dossier / "extrait_sirh.csv")
+    sondage = pd.read_csv(dossier / "extrait_sondage.csv", dtype={"code_sondage": str})
+    evals = pd.read_csv(dossier / "extrait_eval.csv")
+
+    sondage["id_employee"] = sondage["code_sondage"].astype(int)
+    evals["id_employee"] = evals["eval_number"].str.replace("E_", "", regex=False).astype(int)
+
+    df = sirh.merge(
+        sondage.drop(columns="code_sondage"), on="id_employee", how="inner", validate="one_to_one"
+    ).merge(
+        evals.drop(columns="eval_number"), on="id_employee", how="inner", validate="one_to_one"
+    )
+
+    df = df.drop(columns=COLONNES_CONSTANTES + COLONNES_CORRELEES)
+    # "11 %" -> 11
+    df["augementation_salaire_precedente"] = (
+        df["augementation_salaire_precedente"].str.replace("%", "").str.strip().astype(int)
+    )
+    return df
+
+
+def separer_x_y(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    X = df[COLONNES_ENTREE]
+    y = df[CIBLE].map({"Oui": 1, "Non": 0})
+    return X, y
+
+
+def construire_pipeline() -> Pipeline:
+    """Création des features + encodage + forêt, dans un seul objet."""
+    preprocesseur = ColumnTransformer([
+        ("nom", OneHotEncoder(handle_unknown="ignore"), NOMINALES),
+        ("bin", OneHotEncoder(drop="if_binary"), BINAIRES),
+        ("ord", OrdinalEncoder(categories=[ORDRE_DEPLACEMENT]), ORDINALES),
+        ("num", "passthrough", NUMERIQUES),  # arbres : pas de mise à l'échelle
+    ])
+    return Pipeline([
+        ("features", FunctionTransformer(ajouter_features)),
+        ("prep", preprocesseur),
+        ("clf", RandomForestClassifier(**HYPERPARAMETRES, random_state=RANDOM_STATE, n_jobs=-1)),
+    ])
+
+
+def evaluer(pipeline: Pipeline, X: pd.DataFrame, y: pd.Series, seuil: float) -> dict[str, float]:
+    proba = pipeline.predict_proba(X)[:, 1]
+    pred = (proba >= seuil).astype(int)
+    return {
+        "roc_auc": roc_auc_score(y, proba),
+        "pr_auc": average_precision_score(y, proba),
+        "recall": recall_score(y, pred, zero_division=0),
+        "precision": precision_score(y, pred, zero_division=0),
+        "f1": f1_score(y, pred, zero_division=0),
+        "balanced_accuracy": balanced_accuracy_score(y, pred),
+    }
+
+
+def main() -> None:
+    X, y = separer_x_y(charger_donnees())
+
+    # 1. Évaluation (même découpage que le notebook)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=RANDOM_STATE
+    )
+    pipeline = construire_pipeline().fit(X_train, y_train)
+    metriques = {k: round(float(v), 3) for k, v in evaluer(pipeline, X_test, y_test, SEUIL).items()}
+    print(f"Métriques sur le test (seuil {SEUIL}) :")
+    for nom, valeur in metriques.items():
+        print(f"  {nom:<18} {valeur:.3f}")
+
+    # 2. Modèle final : réentraîné sur toutes les données
+    pipeline = construire_pipeline().fit(X, y)
+
+    metadonnees = {
+        "seuil": SEUIL,
+        "colonnes_entree": COLONNES_ENTREE,
+        "hyperparametres": HYPERPARAMETRES,
+        "metriques_test": metriques,
+        "n_lignes_entrainement": int(len(X)),
+        "taux_depart": round(float(np.mean(y)), 3),
+        "versions": {"scikit-learn": sklearn.__version__, "pandas": pd.__version__,
+                     "numpy": np.__version__},
+    }
+
+    DOSSIER_MODELE.mkdir(exist_ok=True)
+    chemin = DOSSIER_MODELE / "pipeline.joblib"
+    joblib.dump({"pipeline": pipeline, **metadonnees}, chemin, compress=3)
+    (DOSSIER_MODELE / "metadata.json").write_text(
+        json.dumps(metadonnees, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    print(f"\nModèle exporté : {chemin.relative_to(RACINE)} ({chemin.stat().st_size / 1024:.0f} Ko)")
+
+
+if __name__ == "__main__":
+    main()

@@ -3,4 +3,4 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["app"]
+source = ["app", "src"]
