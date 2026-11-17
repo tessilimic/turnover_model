@@ -3,15 +3,18 @@ from typing import get_args
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.main import app
 from app.model import get_modele
 from app.schemas import EXEMPLE_EMPLOYE, EmployeInput
+from src.db.models import Employe, Prediction
 from src.features import BINAIRES, COLONNES_ENTREE, NOMINALES, ORDINALES
 
 
 @pytest.fixture(scope="module")
-def client():
+def client(engine):
     with TestClient(app) as c:  # "with" : exécute le chargement du modèle au démarrage
         yield c
 
@@ -50,7 +53,7 @@ def test_predict_renvoie_probabilite_seuil_et_decision(client, employe):
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"probabilite_depart", "seuil", "depart_predit"}
+    assert set(body) == {"id_prediction", "probabilite_depart", "seuil", "depart_predit"}
     assert 0 <= body["probabilite_depart"] <= 1
     assert body["seuil"] == 0.41
     assert body["depart_predit"] == (body["probabilite_depart"] >= body["seuil"])
@@ -85,6 +88,46 @@ def test_predict_profil_a_risque_vs_profil_stable(client, employe):
     assert p_risque["probabilite_depart"] > p_stable["probabilite_depart"]
     assert p_risque["depart_predit"] is True
     assert p_stable["depart_predit"] is False
+
+
+# ---------- /predict : enregistrement en base ----------
+
+def test_predict_enregistre_entrees_et_sortie(client, engine, employe):
+    body = client.post("/predict", json=employe).json()
+
+    with Session(engine) as session:
+        prediction = session.get(Prediction, body["id_prediction"])
+
+        assert prediction.origine == "prediction"
+        assert prediction.depart == body["depart_predit"]
+        assert prediction.seuil == body["seuil"]
+        assert prediction.probabilite == pytest.approx(body["probabilite_depart"], abs=1e-4)
+        # Entrées liées par la clé étrangère
+        stocke = prediction.employe
+        assert stocke.id_employee is None  # pas un employé du jeu initial
+        assert {col: getattr(stocke, col) for col in COLONNES_ENTREE} == employe
+
+
+def test_chaque_appel_cree_une_nouvelle_ligne(client, engine, employe):
+    def nb_predictions():
+        with Session(engine) as session:
+            return session.scalar(select(func.count()).select_from(Prediction))
+
+    avant = nb_predictions()
+    ids = {client.post("/predict", json=employe).json()["id_prediction"] for _ in range(3)}
+
+    assert nb_predictions() == avant + 3
+    assert len(ids) == 3
+
+
+def test_requete_invalide_n_enregistre_rien(client, engine, employe):
+    with Session(engine) as session:
+        avant = session.scalar(select(func.count()).select_from(Employe))
+
+    client.post("/predict", json=employe | {"genre": "X"})
+
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(Employe)) == avant
 
 
 # ---------- /predict : validation des entrées (422) ----------

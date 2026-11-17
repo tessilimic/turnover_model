@@ -1,0 +1,33 @@
+# Environnement local : base PostgreSQL + API.
+#   docker compose up -d db      -> base seule (pour init_db / train / tests)
+#   docker compose up -d --build -> base + API sur http://localhost:7860
+# Identifiants de développement uniquement.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: turnover
+      POSTGRES_PASSWORD: turnover
+      POSTGRES_DB: turnover
+    ports:
+      - "5433:5432" # 5433 côté machine : n'entre pas en conflit avec un PostgreSQL déjà installé
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turnover -d turnover"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://turnover:turnover@db:5432/turnover
+    ports:
+      - "7860:7860"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

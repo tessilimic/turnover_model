@@ -41,6 +41,7 @@
     "f1": 0.429,
     "balanced_accuracy": 0.718
   },
+  "source_donnees": "postgresql",
   "n_lignes_entrainement": 1470,
   "taux_depart": 0.161,
   "versions": {

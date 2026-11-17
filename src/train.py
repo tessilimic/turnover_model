@@ -1,6 +1,7 @@
 """Entraîne le modèle de turnover et l'exporte dans model/.
 
 Usage : python -m src.train
+(base remplie au préalable par : python -m src.db.init_db)
 
 Reprend le modèle final du notebook (hyperparamètres et seuil retenus) :
 1. évaluation sur un jeu de test (80/20 stratifié, comme le notebook) ;
@@ -28,11 +29,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, OrdinalEncoder
 
+from sqlalchemy import Engine, select
+
+from src.db.models import Employe, Prediction
+from src.db.session import get_engine
 from src.features import (
     BINAIRES,
-    CIBLE,
-    COLONNES_CONSTANTES,
-    COLONNES_CORRELEES,
     COLONNES_ENTREE,
     NOMINALES,
     NUMERIQUES,
@@ -42,7 +44,6 @@ from src.features import (
 )
 
 RACINE = Path(__file__).resolve().parents[1]
-DOSSIER_DONNEES = RACINE / "data"
 DOSSIER_MODELE = RACINE / "model"
 
 RANDOM_STATE = 42
@@ -56,32 +57,25 @@ HYPERPARAMETRES = {
 }
 
 
-def charger_donnees(dossier: Path = DOSSIER_DONNEES) -> pd.DataFrame:
-    """Fusionne et nettoie les 3 fichiers sources (1 ligne par employé)."""
-    sirh = pd.read_csv(dossier / "extrait_sirh.csv")
-    sondage = pd.read_csv(dossier / "extrait_sondage.csv", dtype={"code_sondage": str})
-    evals = pd.read_csv(dossier / "extrait_eval.csv")
+def charger_donnees(engine: Engine) -> pd.DataFrame:
+    """Lit le jeu d'entraînement en base : employés avec un départ observé.
 
-    sondage["id_employee"] = sondage["code_sondage"].astype(int)
-    evals["id_employee"] = evals["eval_number"].str.replace("E_", "", regex=False).astype(int)
-
-    df = sirh.merge(
-        sondage.drop(columns="code_sondage"), on="id_employee", how="inner", validate="one_to_one"
-    ).merge(
-        evals.drop(columns="eval_number"), on="id_employee", how="inner", validate="one_to_one"
+    Les prédictions faites par l'API ne servent jamais à l'entraînement.
+    Tri par id_employee : même ordre que les CSV, donc même découpage train/test.
+    """
+    requete = (
+        select(*(getattr(Employe, col) for col in COLONNES_ENTREE), Prediction.depart)
+        .join(Prediction, Prediction.employe_id == Employe.id)
+        .where(Prediction.origine == "observation")
+        .order_by(Employe.id_employee)
     )
-
-    df = df.drop(columns=COLONNES_CONSTANTES + COLONNES_CORRELEES)
-    # "11 %" -> 11
-    df["augementation_salaire_precedente"] = (
-        df["augementation_salaire_precedente"].str.replace("%", "").str.strip().astype(int)
-    )
-    return df
+    with engine.connect() as conn:
+        return pd.read_sql(requete, conn)
 
 
 def separer_x_y(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     X = df[COLONNES_ENTREE]
-    y = df[CIBLE].map({"Oui": 1, "Non": 0})
+    y = df["depart"].astype(int)
     return X, y
 
 
@@ -114,7 +108,11 @@ def evaluer(pipeline: Pipeline, X: pd.DataFrame, y: pd.Series, seuil: float) -> 
 
 
 def main() -> None:
-    X, y = separer_x_y(charger_donnees())
+    engine = get_engine()
+    print(f"Données lues dans : {engine.url.render_as_string(hide_password=True)}")
+    X, y = separer_x_y(charger_donnees(engine))
+    if X.empty:
+        raise SystemExit("Aucune donnée en base : lancer d'abord python -m src.db.init_db")
 
     # 1. Évaluation (même découpage que le notebook)
     X_train, X_test, y_train, y_test = train_test_split(
@@ -134,6 +132,7 @@ def main() -> None:
         "colonnes_entree": COLONNES_ENTREE,
         "hyperparametres": HYPERPARAMETRES,
         "metriques_test": metriques,
+        "source_donnees": engine.dialect.name,
         "n_lignes_entrainement": int(len(X)),
         "taux_depart": round(float(np.mean(y)), 3),
         "versions": {"scikit-learn": sklearn.__version__, "pandas": pd.__version__,
