@@ -169,7 +169,7 @@ cp .env.example .env     # puis remplacer chaque "a-remplacer"
 | Mesure | Détail |
 |---|---|
 | **HTTPS** | Assuré par Hugging Face en production ; en-tête `Strict-Transport-Security` |
-| **En-têtes de sécurité** | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` ; sur les réponses de l'API : `Content-Security-Policy: default-src 'none'` et `Cache-Control: no-store` (les données RH et les jetons ne sont pas mis en cache) |
+| **En-têtes de sécurité** | Partout : `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`. Réponses de l'API : `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `X-Frame-Options: DENY` et `Cache-Control: no-store` (données RH et jetons jamais en cache, jamais dans un cadre). Documentation (`/`, `/docs`, `/redoc`) : `frame-ancestors 'self' https://huggingface.co`, pour que l'onglet *App* du Space puisse l'afficher (origines modifiables avec `FRAME_ANCESTORS`) |
 | **CORS** | Non activé : aucun site tiers ne peut appeler l'API depuis un navigateur |
 | **Validation stricte** | Schémas Pydantic (listes fermées, bornes, champs inconnus refusés) |
 | **Erreurs** | Messages génériques côté client ; détails uniquement dans les logs serveur |

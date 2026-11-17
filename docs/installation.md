@@ -119,6 +119,7 @@ Ouvrir <http://127.0.0.1:7860/docs>, bouton **Authorize**, se connecter.
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | API sur SQLite | Compte admin créé au démarrage (Hugging Face) |
 | `MODEL_PATH` | API | Modèle chargé (`model/pipeline.joblib` par défaut) |
 | `LOG_LEVEL`, `LOG_FILE` | API | Logs techniques (voir [Logs](logs.md)) |
+| `FRAME_ANCESTORS` | API | Sites autorisés à afficher la documentation dans un cadre (`https://huggingface.co` par défaut) |
 | `TEST_DATABASE_URL`, `TEST_ROLES_PG` | tests | Voir [Tests](tests.md) |
 
 Il n'y a **aucune valeur par défaut** pour les connexions : sans `.env` ni variable,

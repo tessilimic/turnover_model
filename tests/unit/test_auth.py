@@ -204,12 +204,43 @@ def test_entetes_de_securite_sur_les_reponses_api():
     assert "max-age" in response.headers["Strict-Transport-Security"]
 
 
-def test_swagger_garde_ses_scripts():
-    """La politique de contenu stricte casserait Swagger UI (scripts d'un CDN)."""
-    response = TestClient(app).get("/docs")
+@pytest.mark.parametrize("chemin", ["/docs", "/redoc", "/docs/oauth2-redirect"])
+def test_documentation_affichable_dans_l_onglet_app_du_space(chemin):
+    """L'onglet App de Hugging Face affiche Swagger dans un cadre de huggingface.co.
 
-    assert "Content-Security-Policy" not in response.headers
-    assert response.headers["X-Frame-Options"] == "DENY"
+    La politique stricte (default-src 'none', X-Frame-Options: DENY) donnerait une
+    page blanche : scripts du CDN bloqués, affichage en cadre refusé.
+    """
+    response = TestClient(app).get(chemin)
+
+    assert response.headers["Content-Security-Policy"] == "frame-ancestors 'self' https://huggingface.co"
+    assert "X-Frame-Options" not in response.headers
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_redirection_d_accueil_affichable_dans_un_cadre():
+    """L'onglet App charge d'abord « / », qui redirige vers /docs."""
+    response = TestClient(app).get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert "X-Frame-Options" not in response.headers
+    assert "https://huggingface.co" in response.headers["Content-Security-Policy"]
+
+
+@pytest.mark.parametrize("chemin", ["/health", "/openapi.json", "/documents"])
+def test_hors_documentation_jamais_dans_un_cadre(chemin):
+    headers = TestClient(app).get(chemin).headers
+
+    assert headers["X-Frame-Options"] == "DENY"
+    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+
+
+def test_origines_du_cadre_configurables(monkeypatch):
+    monkeypatch.setenv("FRAME_ANCESTORS", "https://intranet.exemple.fr")
+
+    csp = TestClient(app).get("/docs").headers["Content-Security-Policy"]
+
+    assert csp == "frame-ancestors 'self' https://intranet.exemple.fr"
 
 
 def test_routes_protegees_sans_jeton():
