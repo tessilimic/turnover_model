@@ -47,8 +47,8 @@ documentation. Deux déploiements ne se chevauchent jamais (le second attend le 
 | Nom | Type | Valeur |
 |---|---|---|
 | `HF_TOKEN` | Secret | Jeton Hugging Face *fine-grained*, écriture sur le Space uniquement |
-| `HF_USERNAME` | Variable | Identifiant Hugging Face |
-| `HF_SPACE_NAME` | Variable | Nom du Space (ex. `turnover-api`) |
+| `HF_USERNAME` | Variable | Identifiant Hugging Face : `tessilimic` |
+| `HF_SPACE_NAME` | Variable | Nom du Space : `turnover_api` |
 
 ### GitHub Pages
 

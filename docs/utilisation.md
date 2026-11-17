@@ -3,7 +3,9 @@
 URL de base :
 
 - en local : `http://localhost:7860`
-- en ligne : `https://<HF_USERNAME>-<HF_SPACE_NAME>.hf.space` (Space Hugging Face)
+- en ligne : `https://tessilimic-turnover-api.hf.space`
+  (Space [tessilimic/turnover_api](https://huggingface.co/spaces/tessilimic/turnover_api) ;
+  Hugging Face remplace `_` par `-` dans l'adresse directe)
 
 | Méthode | Route | Rôle |
 |---|---|---|

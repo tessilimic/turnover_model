@@ -203,7 +203,11 @@ Guide complet : [Installation et configuration](docs/installation.md).
 
 ## Utilisation
 
-Le plus simple : **Swagger UI** sur `/docs`, bouton *Try it out* (exemple pré-rempli).
+Le plus simple : **Swagger UI**, bouton *Try it out* (exemple pré-rempli) :
+
+* en ligne : https://tessilimic-turnover-api.hf.space/docs
+  (Space : [huggingface.co/spaces/tessilimic/turnover_api](https://huggingface.co/spaces/tessilimic/turnover_api)) ;
+* en local : http://localhost:7860/docs.
 
 ```sh
 curl -X POST http://localhost:7860/predict \
@@ -280,7 +284,7 @@ Détails, vérification et retour arrière : [Déploiement](docs/deploiement.md)
 |---|---|---|
 | **MkDocs** | Guides, modèle, architecture, maintenance | [tessilimic.github.io/turnover_model](https://tessilimic.github.io/turnover_model/) |
 | **Sphinx** | Référence du code (docstrings) | [tessilimic.github.io/turnover_model/code](https://tessilimic.github.io/turnover_model/code/) |
-| **Swagger** | Référence interactive de l'API | `/docs` sur l'API, et [dans le site MkDocs](https://tessilimic.github.io/turnover_model/api/) |
+| **Swagger** | Référence interactive de l'API | [sur l'API en ligne](https://tessilimic-turnover-api.hf.space/docs), et [dans le site MkDocs](https://tessilimic.github.io/turnover_model/api/) |
 | **Markdown** | Ce README et les pages de `docs/` | Directement sur GitHub ([docs/](docs/index.md)) |
 
 Le site (MkDocs + Sphinx) est publié sur **GitHub Pages** à chaque fusion dans `main`.
@@ -374,4 +378,4 @@ Projet : [github.com/tessilimic/turnover_model](https://github.com/tessilimic/tu
 [docker-shield]: https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white
 [docker-url]: https://www.docker.com/
 [hf-shield]: https://img.shields.io/badge/Hugging%20Face-Space-FFD21E?logo=huggingface&logoColor=black
-[hf-url]: https://huggingface.co/spaces/HF_USERNAME/turnover-api
+[hf-url]: https://huggingface.co/spaces/tessilimic/turnover_api
