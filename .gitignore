@@ -5,8 +5,14 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
 .ipynb_checkpoints/
 .vscode/
 .idea/
 *.db
 site/
+
+# Secrets (voir .env.example)
+.env
+.env.*
+!.env.example

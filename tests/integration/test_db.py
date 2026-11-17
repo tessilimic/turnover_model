@@ -32,7 +32,7 @@ def test_lire_csv_fusionne_les_3_fichiers():
 
 # ---------- Schéma ----------
 
-@pytest.mark.parametrize("table", ["employes", "predictions", "interactions"])
+@pytest.mark.parametrize("table", ["employes", "predictions", "interactions", "utilisateurs"])
 def test_colonnes_en_base_identiques_a_l_orm(engine, table):
     """Le schéma réellement créé (fichier SQL sur PostgreSQL) correspond aux modèles ORM."""
     en_base = {c["name"] for c in inspect(engine).get_columns(table)}

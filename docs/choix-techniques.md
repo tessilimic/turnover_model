@@ -65,6 +65,21 @@ immédiatement dans les logs du Space, au lieu d'apparaître à la première req
 | **Écrit par un middleware** | Couvre aussi les appels refusés (422) ou en erreur (500), qui n'atteignent jamais le code de `/predict`. Un échec d'écriture du journal ne fait pas échouer la réponse. |
 | **`GET /logs` protégé par clé, désactivé par défaut** | Le Space est public et le journal contient des données RH : sans clé configurée, l'endpoint répond 403. Données d'entrée masquées sauf demande explicite. Alternative écartée : un fichier téléchargeable (pas de filtre, pas de contrôle d'accès). |
 
+## Sécurité
+
+| Choix | Pourquoi | Alternative écartée |
+|---|---|---|
+| **OAuth2 *password* + JWT** | Standard intégré à FastAPI et à Swagger (bouton *Authorize*) ; jeton à durée limitée, lié à une personne | Clé d'API partagée : ni expiration, ni traçabilité individuelle |
+| **Compte relu à chaque requête** | Désactivation et changement de rôle immédiats, malgré des jetons sans état | Liste de révocation : plus complexe, inutile à cette échelle |
+| **Argon2id** | Recommandé par l'OWASP, résistant aux GPU, sel intégré | bcrypt (acceptable, plus ancien), SHA-256 (inadapté aux mots de passe) |
+| **Rôles applicatifs `rh` / `auditeur` / `admin`** | Séparation des tâches : qui prédit ne contrôle pas | Un rôle unique |
+| **Comptes gérés en ligne de commande** | Aucune route d'API ne peut créer un compte ou élever un rôle : surface d'attaque réduite | Route d'administration |
+| **Un rôle PostgreSQL par programme** | Une faille de l'API ne permet ni de modifier l'historique, ni de relire les données RH, ni de créer un compte | Un seul utilisateur propriétaire pour tout |
+| **Secrets uniquement dans l'environnement** | Rien dans le dépôt ; aucune valeur par défaut qui finirait en production | Valeurs de développement dans le code |
+| **pip-audit + bandit en CI** | Détection automatique des dépendances vulnérables et des erreurs de code courantes | Revue manuelle seule |
+
+Détails : [Sécurité et accès](securite.md).
+
 ## Données
 
 ### PostgreSQL + SQLAlchemy (ORM)

@@ -11,7 +11,9 @@ from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
 from src.db.models import Employe, Prediction
-from src.db.session import creer_schema, get_database_url, get_engine, supprimer_schema
+from src.db.session import (
+    appliquer_roles, creer_engine, creer_schema, get_database_url, supprimer_schema,
+)
 from src.features import CIBLE, COLONNES_CONSTANTES, COLONNES_CORRELEES, COLONNES_ENTREE
 
 DOSSIER_DONNEES = Path(__file__).resolve().parents[2] / "data"
@@ -102,12 +104,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    engine = get_engine()
+    engine = creer_engine(get_database_url("ADMIN_DATABASE_URL"))
     print(f"Base : {engine.url.render_as_string(hide_password=True)}")
     if args.reset:
         supprimer_schema(engine)
         print("Tables supprimées.")
     creer_schema(engine)
+    if engine.dialect.name == "postgresql":
+        roles = appliquer_roles(engine)
+        print(f"Rôles d'accès appliqués ; connexion activée pour : {', '.join(roles) or 'aucun'}")
 
     ajoutes = charger_csv_en_base(engine)
     print(f"Jeu initial : {ajoutes} employés ajoutés" if ajoutes else

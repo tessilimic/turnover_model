@@ -23,3 +23,5 @@ requirements-docs.txt
 sql/02_requetes_utiles.sql
 sql/03_suivi.sql
 sql/04_journal.sql
+.env
+.env.*

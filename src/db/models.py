@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import (
+    JSON, CheckConstraint, DateTime, ForeignKey, Index, String, func, text, true,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -116,7 +118,31 @@ class Interaction(Base):
     )
     version_api: Mapped[str] = mapped_column(String(20))
     empreinte_modele: Mapped[str | None] = mapped_column(String(16))
+    utilisateur: Mapped[str | None] = mapped_column(String(50))
 
     prediction: Mapped[Prediction | None] = relationship()
 
     __table_args__ = (Index("ix_interactions_cree_le", "cree_le"),)
+
+
+class Utilisateur(Base):
+    """Compte de l'API. Seule l'empreinte Argon2id du mot de passe est stockée."""
+
+    __tablename__ = "utilisateurs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    identifiant: Mapped[str] = mapped_column(String(50), unique=True)
+    mot_de_passe_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(20))
+    actif: Mapped[bool] = mapped_column(server_default=true())
+    echecs_connexion: Mapped[int] = mapped_column(server_default=text("0"))
+    verrouille_jusqu_a: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    derniere_connexion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'rh', 'auditeur')", name="ck_utilisateurs_role"),
+        CheckConstraint(
+            "substr(mot_de_passe_hash, 1, 10) = '$argon2id$'", name="ck_utilisateurs_hash"
+        ),
+    )

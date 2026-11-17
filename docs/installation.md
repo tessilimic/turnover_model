@@ -41,71 +41,111 @@ git lfs ls-files           # doit afficher : model/pipeline.joblib
 
 Pour construire la documentation, installer en plus `requirements-docs.txt`.
 
-## 3. Base de données locale
+## 3. Secrets (`.env`)
 
 ```bash
-docker compose up -d db        # PostgreSQL 17 sur localhost:5433
-python -m src.db.init_db       # crée les tables et charge les 1 470 employés du jeu initial
+cp .env.example .env
 ```
 
-`init_db` peut être relancé sans risque : il ne crée pas de doublon.
-L'option `--reset` supprime les tables **et toutes les prédictions** avant de recharger.
+Remplacer **chaque** valeur `a-remplacer` par une valeur aléatoire :
 
-## 4. Lancer l'API
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+`.env` n'est jamais versionné (`.gitignore`). Il est lu par Docker Compose et par
+l'application. Détail de chaque secret : [Sécurité](securite.md#secrets).
+
+!!! warning "Base créée avant la version 1.0"
+    Le mot de passe du compte propriétaire est fixé à la **création** du volume. Si une
+    base existait déjà (anciens identifiants `turnover`/`turnover`), la recréer :
+    `docker compose down -v` (supprime les données, rechargées à l'étape suivante).
+
+## 4. Base de données locale
+
+```bash
+docker compose up -d db        # PostgreSQL 17 sur 127.0.0.1:5433
+python -m src.db.init_db       # tables, rôles d'accès, jeu initial (1 470 employés)
+```
+
+`init_db` utilise la connexion administrateur (`ADMIN_DATABASE_URL`) et :
+
+1. crée les tables (`sql/01_schema.sql`) ;
+2. crée les rôles à privilèges minimaux `turnover_api`, `turnover_ml`,
+   `turnover_auditeur` et leur attribue les mots de passe du `.env` (`sql/05_roles.sql`) ;
+3. charge le jeu initial.
+
+Il peut être relancé sans risque (pas de doublon ; utile après un changement de mot de
+passe dans `.env`). `--reset` supprime les tables **et toutes les données** avant de recharger.
+
+## 5. Créer les comptes de l'API
+
+```bash
+python -m app.utilisateurs creer admin --role admin       # mot de passe demandé sans écho
+python -m app.utilisateurs creer marie.rh --role rh
+python -m app.utilisateurs creer paul.audit --role auditeur
+```
+
+Rôles : `rh` (prédire), `auditeur` (consulter le journal), `admin` (tout).
+Voir [Sécurité](securite.md#gerer-les-comptes).
+
+## 6. Lancer l'API
 
 === "Avec Docker (recommandé)"
 
     ```bash
-    docker compose up -d --build   # base + API
+    docker compose up -d --build   # base + API, connectée avec le rôle turnover_api
     ```
 
 === "Sans Docker (développement)"
 
     ```bash
-    uvicorn app.main:app --reload --port 7860
+    uvicorn app.main:app --reload --port 7860   # lit DATABASE_URL et JWT_SECRET dans .env
     ```
 
-Ouvrir <http://localhost:7860/docs> (Swagger UI).
+Ouvrir <http://127.0.0.1:7860/docs>, bouton **Authorize**, se connecter.
 
-## 5. Configuration
+## 7. Configuration
 
-L'application se configure par **variables d'environnement** :
-
-| Variable | Défaut | Rôle |
+| Variable | Utilisée par | Rôle |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+psycopg://turnover:turnover@localhost:5433/turnover` | Base utilisée par l'API, `init_db` et `train` |
-| `MODEL_PATH` | `model/pipeline.joblib` | Modèle chargé par l'API |
-| `LOGS_API_KEY` | *(aucune : `/logs` désactivé)* | Clé de consultation du journal (`GET /logs`, en-tête `X-API-Key`) |
-| `LOG_LEVEL` | `INFO` | Niveau des logs techniques |
-| `LOG_FILE` | *(aucun)* | Écrit aussi les logs dans ce fichier (rotation) |
-| `TEST_DATABASE_URL` | *(vide : SQLite temporaire)* | Base utilisée par les tests |
+| `DATABASE_URL` | API | Connexion avec le rôle `turnover_api` |
+| `ML_DATABASE_URL` | `src.train` | Connexion avec le rôle `turnover_ml` (lecture seule) |
+| `ADMIN_DATABASE_URL` | `init_db`, `app.utilisateurs` | Connexion propriétaire |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Docker Compose | Compte propriétaire de la base |
+| `TURNOVER_API_DB_PASSWORD`, `TURNOVER_ML_DB_PASSWORD`, `TURNOVER_AUDITEUR_DB_PASSWORD` | `init_db`, Docker Compose | Mots de passe des rôles |
+| `JWT_SECRET` | API | Signature des jetons (≥ 32 caractères) |
+| `JWT_DUREE_MINUTES` | API | Durée de validité d'un jeton (30 par défaut) |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | API sur SQLite | Compte admin créé au démarrage (Hugging Face) |
+| `MODEL_PATH` | API | Modèle chargé (`model/pipeline.joblib` par défaut) |
+| `LOG_LEVEL`, `LOG_FILE` | API | Logs techniques (voir [Logs](logs.md)) |
+| `TEST_DATABASE_URL`, `TEST_ROLES_PG` | tests | Voir [Tests](tests.md) |
 
-Valeurs selon l'environnement :
+Il n'y a **aucune valeur par défaut** pour les connexions : sans `.env` ni variable,
+les commandes s'arrêtent avec un message explicite. Si `ML_DATABASE_URL` ou
+`ADMIN_DATABASE_URL` est absent, `DATABASE_URL` est utilisé.
 
-| Environnement | `DATABASE_URL` |
+| Environnement | Base |
 |---|---|
-| Local, hors Docker | défaut (PostgreSQL de `docker-compose.yml`) |
-| `docker compose` | `postgresql+psycopg://turnover:turnover@db:5432/turnover` (fixé dans `docker-compose.yml`) |
-| Image seule / Hugging Face | `sqlite:////home/user/db/turnover.db` (fixé dans le `Dockerfile`, non persistant) |
+| Local, hors Docker | PostgreSQL de `docker-compose.yml`, via `.env` |
+| `docker compose` | Rôle `turnover_api`, adresse construite dans `docker-compose.yml` |
+| Image seule / Hugging Face | `sqlite:////home/user/db/turnover.db` (`Dockerfile`, non persistant) |
 
-!!! note "Port 5433"
-    La base Docker est exposée sur **5433** pour ne pas entrer en conflit avec un
-    PostgreSQL déjà installé sur la machine (port 5432).
+!!! note "Port 5433 et 127.0.0.1"
+    La base Docker est exposée sur **5433** (pas de conflit avec un PostgreSQL déjà
+    installé) et seulement sur **127.0.0.1** (pas d'accès depuis le réseau). Utiliser
+    `127.0.0.1` plutôt que `localhost` dans les adresses : sous Windows, `localhost`
+    est d'abord résolu en IPv6 (`::1`), où la base n'écoute pas.
 
-!!! danger "Identifiants"
-    `turnover` / `turnover` sont des identifiants de **développement local**.
-    Pour une base partagée ou hébergée, utiliser des identifiants forts, passés
-    uniquement par `DATABASE_URL` (secret), jamais dans le code.
-
-## 6. Vérifier l'installation
+## 8. Vérifier l'installation
 
 ```bash
 pytest -m unit                     # quelques secondes, sans base
 pytest                             # tous les tests (SQLite temporaire)
-curl http://localhost:7860/health  # {"status":"ok"}
+curl http://127.0.0.1:7860/health  # {"status":"ok"}
 ```
 
-## 7. Construire la documentation
+## 9. Construire la documentation
 
 ```bash
 pip install -r requirements-docs.txt

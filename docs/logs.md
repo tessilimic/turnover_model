@@ -6,7 +6,7 @@ Deux niveaux de traces, reliés par un même **identifiant de requête** (`reque
 |---|---|---|
 | **Quoi** | Requêtes HTTP, appels au modèle, requêtes SQL, transactions, erreurs | Chaque appel à `/predict` : entrées, résultat, erreurs, durée, client |
 | **Où** | Sortie standard (une ligne JSON par événement), fichier en option | Table `interactions` de la base |
-| **Lire** | `docker compose logs api`, onglet **Logs** du Space, fichier `LOG_FILE` | `GET /logs` (clé d'API), SQL (`sql/04_journal.sql`) |
+| **Lire** | `docker compose logs api`, onglet **Logs** du Space, fichier `LOG_FILE` | `GET /logs` (rôle auditeur ou admin), SQL (`sql/04_journal.sql`) |
 | **Pour** | Diagnostiquer, mesurer, suivre une requête dans l'API et la base | Auditer l'usage du modèle, rejouer une prédiction, analyser les refus |
 | **Durée** | Selon l'hébergeur (le Space ne conserve que les logs récents) | 12 mois (voir [Conservation](#conservation-et-donnees-personnelles)) |
 
@@ -109,7 +109,8 @@ Un appel à `/predict` = une ligne, **qu'il réussisse ou non** :
 | `cree_le` | Date et heure |
 | `methode`, `route`, `code_http`, `duree_ms` | Requête HTTP et résultat |
 | `client`, `user_agent` | Adresse IP et logiciel du client |
-| `entrees` | Corps reçu (JSON), **même invalide** |
+| `utilisateur` | Compte authentifié à l'origine de l'appel (vide si non authentifié) |
+| `entrees` | Corps reçu (JSON), **même invalide** ; jamais conservé pour un appel non authentifié |
 | `erreurs` | Détail de validation (si 422) |
 | `prediction_id` | Prédiction produite (clé étrangère vers `predictions`, NULL si refusée) |
 | `version_api`, `empreinte_modele` | Version de l'API et modèle exact utilisé |
@@ -122,16 +123,16 @@ l'échec est signalé dans les logs techniques (`interaction.erreur`).
 
 ### Consulter : `GET /logs`
 
-Protégé par une clé d'API, transmise dans l'en-tête **`X-API-Key`** :
+Réservé aux rôles **auditeur** et **admin** (voir [Sécurité](securite.md#roles-et-droits)) :
 
 | Situation | Réponse |
 |---|---|
-| `LOGS_API_KEY` non défini sur le serveur | `403` : consultation désactivée |
-| Clé absente ou fausse | `401` |
-| Bonne clé | `200` + page de résultats |
+| Sans jeton, jeton invalide ou expiré | `401` |
+| Rôle `rh` | `403` |
+| Rôle `auditeur` ou `admin` | `200` + page de résultats |
 
 ```bash
-curl "http://localhost:7860/logs?limit=20&code_http=422" -H "X-API-Key: dev-logs-key"
+curl "http://localhost:7860/logs?limit=20&code_http=422" -H "Authorization: Bearer <jeton>"
 ```
 
 | Paramètre | Rôle |
@@ -149,23 +150,14 @@ curl "http://localhost:7860/logs?limit=20&code_http=422" -H "X-API-Key: dev-logs
     "id": 1, "request_id": "demo-001", "cree_le": "2026-11-17T02:32:53.222Z",
     "methode": "POST", "route": "/predict", "code_http": 200, "duree_ms": 89.65,
     "client": "172.18.0.1", "user_agent": "curl/7.87.0", "prediction_id": 1473,
-    "version_api": "0.4.0", "empreinte_modele": "39994109fb48",
-    "erreurs": null, "entrees": null
+    "version_api": "1.0.0", "empreinte_modele": "39994109fb48",
+    "utilisateur": "marie.rh", "erreurs": null, "entrees": null
   }]
 }
 ```
 
-Dans Swagger (`/docs`) : bouton **Authorize**, saisir la clé, puis *Try it out* sur `GET /logs`.
-
-| Environnement | Clé |
-|---|---|
-| `docker compose` | `dev-logs-key` (développement uniquement, modifiable via `LOGS_API_KEY`) |
-| Hugging Face | Secret `LOGS_API_KEY` du Space ; sans lui, `/logs` répond 403 |
-| `uvicorn` en local | Variable `LOGS_API_KEY` du terminal |
-
-!!! warning "Choisir une clé forte en production"
-    Le Space est public : `/logs` donne accès à des données RH. Utiliser une clé longue
-    et aléatoire, par exemple `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+Dans Swagger (`/docs`) : bouton **Authorize** (identifiant et mot de passe d'un
+auditeur), puis *Try it out* sur `GET /logs`.
 
 ### Consulter en SQL
 
@@ -173,7 +165,7 @@ Dans Swagger (`/docs`) : bouton **Authorize**, saisir la clé, puis *Try it out*
 champs les plus refusés, parcours complet d'une requête, purge.
 
 ```bash
-docker compose exec -T db psql -U turnover -d turnover < sql/04_journal.sql
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/04_journal.sql
 ```
 
 ## Conservation et données personnelles
@@ -183,7 +175,8 @@ Le journal contient des **données personnelles** : profil RH envoyé, adresse I
 - Durée de conservation proposée : **12 mois**, puis purge (requête 5 de
   `sql/04_journal.sql`, à intégrer à la [revue mensuelle](maintenance.md#suivi-mensuel)).
   À valider avec le DPO.
-- Accès restreint : clé d'API, données d'entrée masquées par défaut dans `/logs`.
+- Accès restreint : rôles `auditeur` et `admin` uniquement, données d'entrée masquées par défaut
+  dans `/logs` ; en base, le rôle `turnover_auditeur` ne voit ni `entrees` ni `client`.
 - Supprimer une prédiction ne supprime pas sa trace : `prediction_id` devient NULL
   (`ON DELETE SET NULL`), le reste de la ligne est conservé pour l'audit.
 - Sur Hugging Face (SQLite non persistant), le journal est perdu au redémarrage du Space.

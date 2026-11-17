@@ -4,27 +4,25 @@
   s'il est fourni et valide), renvoyé dans la réponse et présent dans tous les logs.
 * Chaque appel à ``/predict`` (réussi, refusé ou en erreur) est enregistré dans la
   table ``interactions``.
-* ``GET /logs`` permet de consulter ce journal, avec une clé d'API (``LOGS_API_KEY``).
+* ``GET /logs`` permet de consulter ce journal (rôles ``auditeur`` et ``admin``).
 """
 
 import logging
-import os
 import re
-import secrets
 import time
 import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.security import APIKeyHeader
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from app.auth import acces_logs
 from app.logs import request_id_courant
 from app.schemas import InteractionLog, PageInteractions
 from src.db.models import Interaction
@@ -85,6 +83,7 @@ async def tracer_requetes(request: Request, call_next):
                 "prediction_id": getattr(etat, "prediction_id", None),
                 "version_api": request.app.version,
                 "empreinte_modele": getattr(etat, "empreinte_modele", None),
+                "utilisateur": getattr(etat, "utilisateur", None),
             })
         request_id_courant.reset(jeton)
 
@@ -123,37 +122,15 @@ async def erreur_validation(request: Request, exc: RequestValidationError):
 
 # ---------------------------------------------------------------- GET /logs
 
-cle_api = APIKeyHeader(
-    name="X-API-Key",
-    auto_error=False,
-    description="Clé de consultation des logs (variable LOGS_API_KEY du serveur).",
-)
-
-
-def verifier_cle_logs(cle: Annotated[str | None, Security(cle_api)]) -> None:
-    """Autorise la consultation des logs.
-
-    Raises:
-        HTTPException: 403 si ``LOGS_API_KEY`` n'est pas défini (consultation
-            désactivée), 401 si la clé est absente ou incorrecte.
-    """
-    attendue = os.getenv("LOGS_API_KEY")
-    if not attendue:
-        raise HTTPException(403, "Consultation des logs désactivée : LOGS_API_KEY non défini.")
-    if not cle or not secrets.compare_digest(cle.encode(), attendue.encode()):
-        journal.warning("accès aux logs refusé", extra={"evenement": "logs.acces_refuse"})
-        raise HTTPException(401, "Clé d'API absente ou invalide (en-tête X-API-Key).")
-
-
 routeur_logs = APIRouter(tags=["traçabilité"])
 
 
 @routeur_logs.get(
     "/logs",
     summary="Consulter le journal des interactions",
-    dependencies=[Depends(verifier_cle_logs)],
-    responses={401: {"description": "Clé absente ou invalide."},
-               403: {"description": "Consultation désactivée (LOGS_API_KEY non défini)."}},
+    dependencies=[Depends(acces_logs)],
+    responses={401: {"description": "Non authentifié (jeton absent, invalide ou expiré)."},
+               403: {"description": "Rôle insuffisant (auditeur ou admin requis)."}},
 )
 def lire_logs(
     session: Annotated[Session, Depends(get_session)],
@@ -166,7 +143,7 @@ def lire_logs(
 ) -> PageInteractions:
     """Renvoie les appels à `/predict`, du plus récent au plus ancien.
 
-    Protégé par l'en-tête **X-API-Key** (bouton *Authorize* de Swagger).
+    Réservé aux rôles **auditeur** et **admin** (bouton *Authorize* de Swagger).
     Par défaut, les données envoyées (`entrees`, données RH) ne sont pas renvoyées.
     """
     filtres = []

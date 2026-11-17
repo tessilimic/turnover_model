@@ -3,8 +3,8 @@
   "info": {
     "title": "Turnover API",
     "summary": "Prédiction du risque de départ des employés.",
-    "description": "\nEstime le **risque de départ** d'un employé à partir de son profil RH\n(SIRH, sondage interne, évaluations).\n\n* Modèle : Random Forest (scikit-learn), seuil de décision **0,41**,\n  choisi pour détecter un maximum de départs (F2).\n* Chaque prédiction est **enregistrée** en base (entrées et résultat), et chaque\n  appel à `/predict`, même refusé, est tracé dans le journal des interactions\n  (consultable via `GET /logs`, avec une clé d'API).\n* Chaque réponse porte un en-tête **X-Request-ID**, présent dans tous les logs.\n* Documentation complète : guide utilisateur, fiche du modèle, architecture\n  et maintenance dans le dossier `docs/` du dépôt (site MkDocs).\n",
-    "version": "0.4.0"
+    "description": "\nEstime le **risque de départ** d'un employé à partir de son profil RH\n(SIRH, sondage interne, évaluations).\n\n* Modèle : Random Forest (scikit-learn), seuil de décision **0,41**,\n  choisi pour détecter un maximum de départs (F2).\n* **Authentification** : obtenir un jeton avec `POST /token` (bouton *Authorize*),\n  puis l'envoyer dans l'en-tête `Authorization: Bearer <jeton>`.\n  Rôles : `rh` (prédire), `auditeur` (consulter le journal), `admin` (tout).\n* Chaque prédiction est **enregistrée** en base (entrées et résultat), et chaque\n  appel à `/predict`, même refusé, est tracé dans le journal des interactions\n  (`GET /logs`), avec le compte à l'origine de l'appel.\n* Chaque réponse porte un en-tête **X-Request-ID**, présent dans tous les logs.\n* Documentation complète : guide utilisateur, fiche du modèle, architecture,\n  sécurité et maintenance dans le dossier `docs/` du dépôt (site MkDocs).\n",
+    "version": "1.0.0"
   },
   "paths": {
     "/logs": {
@@ -13,11 +13,11 @@
           "traçabilité"
         ],
         "summary": "Consulter le journal des interactions",
-        "description": "Renvoie les appels à `/predict`, du plus récent au plus ancien.\n\nProtégé par l'en-tête **X-API-Key** (bouton *Authorize* de Swagger).\nPar défaut, les données envoyées (`entrees`, données RH) ne sont pas renvoyées.",
+        "description": "Renvoie les appels à `/predict`, du plus récent au plus ancien.\n\nRéservé aux rôles **auditeur** et **admin** (bouton *Authorize* de Swagger).\nPar défaut, les données envoyées (`entrees`, données RH) ne sont pas renvoyées.",
         "operationId": "lire_logs_logs_get",
         "security": [
           {
-            "APIKeyHeader": []
+            "OAuth2PasswordBearer": []
           }
         ],
         "parameters": [
@@ -128,10 +128,10 @@
             }
           },
           "401": {
-            "description": "Clé absente ou invalide."
+            "description": "Non authentifié (jeton absent, invalide ou expiré)."
           },
           "403": {
-            "description": "Consultation désactivée (LOGS_API_KEY non défini)."
+            "description": "Rôle insuffisant (auditeur ou admin requis)."
           },
           "422": {
             "description": "Validation Error",
@@ -152,7 +152,7 @@
           "monitoring"
         ],
         "summary": "État du service",
-        "description": "Renvoie `{\"status\": \"ok\"}` si l'API répond.",
+        "description": "Renvoie `{\"status\": \"ok\"}` si l'API répond. Public, sans donnée.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -175,13 +175,88 @@
         }
       }
     },
+    "/token": {
+      "post": {
+        "tags": [
+          "authentification"
+        ],
+        "summary": "Se connecter (obtenir un jeton)",
+        "description": "Échange un identifiant et un mot de passe contre un jeton JWT.\n\nLe jeton est valable 30 minutes (par défaut) et s'envoie dans l'en-tête\n`Authorization: Bearer <jeton>`. Après 5 échecs, le compte est verrouillé\n15 minutes.",
+        "operationId": "connexion_token_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_connexion_token_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Jeton"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identifiant ou mot de passe incorrect, ou compte désactivé ou verrouillé (raison non précisée)."
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/moi": {
+      "get": {
+        "tags": [
+          "authentification"
+        ],
+        "summary": "Compte connecté",
+        "description": "Identifiant et rôle du compte associé au jeton.",
+        "operationId": "moi_moi_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UtilisateurCourant"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Non authentifié : jeton absent, invalide ou expiré."
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/predict": {
       "post": {
         "tags": [
           "prédiction"
         ],
         "summary": "Prédire le départ d'un employé",
-        "description": "Estime la probabilité de départ d'un employé et enregistre la prédiction.\n\n- **probabilite_depart** : probabilité estimée par le modèle (0 à 1).\n- **depart_predit** : `true` si la probabilité atteint le seuil (0,41).\n  Ce seuil privilégie la détection des départs : environ 8 départs réels\n  sur 10 sont signalés, au prix de fausses alertes (≈ 3 alertes sur 10 justifiées).\n- Les entrées sont stockées dans la table `employes`, le résultat dans\n  `predictions` (identifiant renvoyé dans **id_prediction**).",
+        "description": "Estime la probabilité de départ d'un employé et enregistre la prédiction.\n\nRéservé aux rôles **rh** et **admin**.\n\n- **probabilite_depart** : probabilité estimée par le modèle (0 à 1).\n- **depart_predit** : `true` si la probabilité atteint le seuil (0,41).\n  Ce seuil privilégie la détection des départs : environ 8 départs réels\n  sur 10 sont signalés, au prix de fausses alertes (≈ 3 alertes sur 10 justifiées).\n- Les entrées sont stockées dans la table `employes`, le résultat dans\n  `predictions` (identifiant renvoyé dans **id_prediction**).",
         "operationId": "predict_predict_post",
         "requestBody": {
           "content": {
@@ -210,6 +285,12 @@
               }
             }
           },
+          "401": {
+            "description": "Non authentifié : jeton absent, invalide ou expiré."
+          },
+          "403": {
+            "description": "Rôle insuffisant pour cette action."
+          },
           "422": {
             "description": "Entrée invalide (champ manquant, valeur hors liste ou hors bornes, champ inconnu). Rien n'est enregistré.",
             "content": {
@@ -230,12 +311,76 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
       }
     }
   },
   "components": {
     "schemas": {
+      "Body_connexion_token_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_connexion_token_post"
+      },
       "EmployeInput": {
         "properties": {
           "age": {
@@ -564,6 +709,18 @@
             "title": "Empreinte Modele",
             "description": "Empreinte du modèle utilisé"
           },
+          "utilisateur": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisateur",
+            "description": "Compte authentifié à l'origine de l'appel"
+          },
           "erreurs": {
             "anyOf": [
               {
@@ -605,10 +762,37 @@
           "prediction_id",
           "version_api",
           "empreinte_modele",
+          "utilisateur",
           "erreurs"
         ],
         "title": "InteractionLog",
         "description": "Une ligne du journal des interactions (table ``interactions``)."
+      },
+      "Jeton": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In",
+            "description": "Durée de validité, en secondes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "Jeton",
+        "description": "Réponse de POST /token (format OAuth2)."
       },
       "PageInteractions": {
         "properties": {
@@ -676,6 +860,43 @@
         ],
         "title": "PredictionOutput"
       },
+      "UtilisateurCourant": {
+        "properties": {
+          "identifiant": {
+            "type": "string",
+            "title": "Identifiant"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "rh",
+              "auditeur"
+            ],
+            "title": "Role"
+          },
+          "derniere_connexion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derniere Connexion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identifiant",
+          "role",
+          "derniere_connexion"
+        ],
+        "title": "UtilisateurCourant",
+        "description": "Réponse de GET /moi."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -718,26 +939,34 @@
       }
     },
     "securitySchemes": {
-      "APIKeyHeader": {
-        "type": "apiKey",
-        "description": "Clé de consultation des logs (variable LOGS_API_KEY du serveur).",
-        "in": "header",
-        "name": "X-API-Key"
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "description": "Se connecter avec un identifiant et un mot de passe (bouton Authorize).",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "token"
+          }
+        }
       }
     }
   },
   "tags": [
     {
-      "name": "prédiction",
-      "description": "Estimer le risque de départ d'un employé."
+      "name": "authentification",
+      "description": "Obtenir un jeton d'accès."
     },
     {
-      "name": "monitoring",
-      "description": "Vérifier que le service est en ligne."
+      "name": "prédiction",
+      "description": "Estimer le risque de départ d'un employé (rôle rh ou admin)."
     },
     {
       "name": "traçabilité",
-      "description": "Consulter le journal des appels au modèle (clé d'API requise)."
+      "description": "Consulter le journal des appels au modèle (rôle auditeur ou admin)."
+    },
+    {
+      "name": "monitoring",
+      "description": "Vérifier que le service est en ligne (public)."
     }
   ]
 }

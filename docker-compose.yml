@@ -1,20 +1,25 @@
 # Environnement local : base PostgreSQL + API.
+#   cp .env.example .env   puis compléter les secrets (voir docs/securite.md)
 #   docker compose up -d db      -> base seule (pour init_db / train / tests)
 #   docker compose up -d --build -> base + API sur http://localhost:7860
-# Identifiants de développement uniquement.
+# Aucun secret ici : tout vient du fichier .env (non versionné).
 services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: turnover
-      POSTGRES_PASSWORD: turnover
-      POSTGRES_DB: turnover
+      POSTGRES_USER: ${POSTGRES_USER:?définir POSTGRES_USER dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: ${POSTGRES_DB:-turnover}
+      # Mots de passe stockés en empreinte SCRAM-SHA-256, connexions par mot de passe uniquement.
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
     ports:
-      - "5433:5432" # 5433 côté machine : n'entre pas en conflit avec un PostgreSQL déjà installé
+      # 127.0.0.1 : accessible depuis cette machine uniquement.
+      # 5433 : n'entre pas en conflit avec un PostgreSQL déjà installé.
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U turnover -d turnover"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,11 +27,12 @@ services:
   api:
     build: .
     environment:
-      DATABASE_URL: postgresql+psycopg://turnover:turnover@db:5432/turnover
-      # Local development key for GET /logs (header X-API-Key). Override with LOGS_API_KEY.
-      LOGS_API_KEY: ${LOGS_API_KEY:-dev-logs-key}
+      # Rôle turnover_api : privilèges minimaux (voir sql/05_roles.sql).
+      DATABASE_URL: postgresql+psycopg://turnover_api:${TURNOVER_API_DB_PASSWORD:?définir TURNOVER_API_DB_PASSWORD dans .env}@db:5432/${POSTGRES_DB:-turnover}
+      JWT_SECRET: ${JWT_SECRET:?définir JWT_SECRET dans .env}
+      JWT_DUREE_MINUTES: ${JWT_DUREE_MINUTES:-30}
     ports:
-      - "7860:7860"
+      - "127.0.0.1:7860:7860"
     depends_on:
       db:
         condition: service_healthy

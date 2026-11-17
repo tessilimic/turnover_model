@@ -10,3 +10,17 @@ markers = [
 
 [tool.coverage.run]
 source = ["app", "src"]
+branch = true  # couvre aussi chaque branche des if/else, pas seulement les lignes
+
+[tool.coverage.report]
+fail_under = 85  # la CI échoue en dessous (couverture actuelle : voir docs/tests.md)
+show_missing = true
+skip_empty = true
+exclude_also = ['if __name__ == "__main__":']
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "Turnover API - couverture des tests"
+
+[tool.coverage.xml]
+output = "coverage.xml"

@@ -26,3 +26,18 @@ Traçabilité
 -----------
 
 .. automodule:: app.tracabilite
+
+Authentification
+----------------
+
+.. automodule:: app.auth
+
+Gestion des comptes
+-------------------
+
+.. automodule:: app.utilisateurs
+
+En-têtes de sécurité
+--------------------
+
+.. automodule:: app.securite
