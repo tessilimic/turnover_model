@@ -18,7 +18,23 @@ DOSSIER_DONNEES = Path(__file__).resolve().parents[2] / "data"
 
 
 def lire_csv(dossier: Path = DOSSIER_DONNEES) -> pd.DataFrame:
-    """Fusionne et nettoie les 3 fichiers sources (1 ligne par employé)."""
+    """Fusionne et nettoie les 3 fichiers sources (1 ligne par employé).
+
+    Les identifiants sont ramenés à un entier commun ``id_employee``
+    (``code_sondage`` ``"000001"`` et ``eval_number`` ``"E_1"`` donnent ``1``),
+    puis les fichiers sont joints sur cette clé (jointure interne, un pour un).
+
+    Args:
+        dossier: Dossier contenant ``extrait_sirh.csv``, ``extrait_sondage.csv``
+            et ``extrait_eval.csv``.
+
+    Returns:
+        ``id_employee``, les colonnes d'entrée du modèle et la cible
+        ``a_quitte_l_entreprise`` (``"Oui"``/``"Non"``).
+
+    Raises:
+        pandas.errors.MergeError: Si un identifiant apparaît deux fois dans un fichier.
+    """
     sirh = pd.read_csv(dossier / "extrait_sirh.csv")
     sondage = pd.read_csv(dossier / "extrait_sondage.csv", dtype={"code_sondage": str})
     evals = pd.read_csv(dossier / "extrait_eval.csv")
@@ -41,9 +57,16 @@ def lire_csv(dossier: Path = DOSSIER_DONNEES) -> pd.DataFrame:
 
 
 def charger_csv_en_base(engine: Engine, dossier: Path = DOSSIER_DONNEES) -> int:
-    """Insère le jeu initial (entrées + départ observé). Renvoie le nombre de lignes ajoutées.
+    """Insère le jeu initial : entrées dans ``employes``, départ observé dans ``predictions``.
 
-    Sans effet si le jeu initial est déjà en base.
+    Sans effet si le jeu initial est déjà en base (peut être relancé sans doublon).
+
+    Args:
+        engine: Connexion SQLAlchemy ; le schéma doit exister.
+        dossier: Dossier des CSV (voir :func:`lire_csv`).
+
+    Returns:
+        Le nombre d'employés ajoutés (0 si le jeu initial était déjà présent).
     """
     with Session(engine) as session:
         deja_charges = session.scalar(

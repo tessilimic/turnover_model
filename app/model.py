@@ -11,7 +11,18 @@ CHEMIN_PAR_DEFAUT = Path(__file__).resolve().parents[1] / "model" / "pipeline.jo
 
 @lru_cache
 def get_modele() -> dict:
-    """Charge le modèle une seule fois (pipeline, seuil, colonnes d'entrée...)."""
+    """Charge le modèle exporté, une seule fois (résultat mis en cache).
+
+    Le chemin est lu dans la variable d'environnement ``MODEL_PATH``
+    (par défaut ``model/pipeline.joblib``).
+
+    Returns:
+        Le dictionnaire exporté par :mod:`src.train` : ``pipeline``, ``seuil``,
+        ``colonnes_entree``, ``metriques_test``, ``versions``...
+
+    Raises:
+        FileNotFoundError: Si le fichier du modèle est absent.
+    """
     chemin = Path(os.getenv("MODEL_PATH", CHEMIN_PAR_DEFAUT))
     modele = joblib.load(chemin)
     # Une prédiction = quelques lignes : le parallélisme coûte plus qu'il ne rapporte.
