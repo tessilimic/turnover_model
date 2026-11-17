@@ -1,5 +1,6 @@
 site_name: Turnover API
 site_description: Prédiction du risque de départ des employés — modèle, API et maintenance
+site_url: https://tessilimic.github.io/turnover_model/
 repo_url: https://github.com/tessilimic/turnover_model
 repo_name: tessilimic/turnover_model
 edit_uri: edit/main/docs/

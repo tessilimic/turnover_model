@@ -130,4 +130,4 @@ menu ou une docstring invalide bloque la PR.
 - [ ] Base PostgreSQL hébergée pour conserver les prédictions de production.
 - [ ] Migrations de schéma (Alembic) dès que la base de production contient des données.
 - [ ] Authentification de l'API (clé d'API) avant tout usage avec des données réelles.
-- [ ] Publication de la documentation sur GitHub Pages.
+- [x] Publication de la documentation sur GitHub Pages.

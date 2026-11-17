@@ -29,11 +29,16 @@ pointeur au lieu du modèle.
 Déclenché à chaque push sur `main` (donc à chaque fusion de PR), ou manuellement
 (onglet Actions, *Run workflow*).
 
-1. Relance toute la CI ; le déploiement n'a lieu que si elle est verte.
-2. Vérifie la présence de `HF_TOKEN`, `HF_USERNAME`, `HF_SPACE_NAME`.
-3. `git push --force` vers le dépôt du Space (fichiers LFS inclus).
+1. Relance toute la CI ; rien n'est déployé si elle échoue.
+2. Puis, en parallèle :
+    - **API** : vérifie `HF_TOKEN`, `HF_USERNAME`, `HF_SPACE_NAME`, puis `git push --force`
+      vers le dépôt du Space (fichiers LFS inclus) ;
+    - **Documentation** : construit MkDocs et Sphinx, puis publie le site sur
+      **GitHub Pages** : <https://tessilimic.github.io/turnover_model/>
+      (référence du code dans [`/code/`](https://tessilimic.github.io/turnover_model/code/)).
 
-Deux déploiements ne se chevauchent jamais (le second attend le premier).
+Les deux publications sont indépendantes : un échec du Space ne bloque pas la
+documentation. Deux déploiements ne se chevauchent jamais (le second attend le premier).
 
 ## Configuration
 
@@ -44,6 +49,14 @@ Deux déploiements ne se chevauchent jamais (le second attend le premier).
 | `HF_TOKEN` | Secret | Jeton Hugging Face *fine-grained*, écriture sur le Space uniquement |
 | `HF_USERNAME` | Variable | Identifiant Hugging Face |
 | `HF_SPACE_NAME` | Variable | Nom du Space (ex. `turnover-api`) |
+
+### GitHub Pages
+
+Une seule fois : *Settings → Pages → Build and deployment → Source* : **GitHub Actions**.
+Gratuit pour un dépôt public (un dépôt privé nécessite un abonnement GitHub payant) ;
+le site est alors public.
+
+### Protection de `main`
 
 Recommandé : protéger `main` (*Settings → Branches*) en exigeant une PR et les
 vérifications **Tests (pytest)**, **Docker build** et **Documentation**.
@@ -58,7 +71,7 @@ vérifications **Tests (pytest)**, **Docker build** et **Documentation**.
 
 ## Vérifier un déploiement
 
-1. Onglet **Actions** : le workflow *Deploy to Hugging Face Spaces* est vert.
+1. Onglet **Actions** : le workflow *Deploy (Hugging Face Spaces + GitHub Pages)* est vert.
 2. Onglet **Files** du Space : `model/pipeline.joblib` porte le badge **LFS**.
 3. Onglet **Logs** du Space : `Application startup complete`.
 4. `GET /health` renvoie `{"status": "ok"}` ; `/docs` affiche Swagger.

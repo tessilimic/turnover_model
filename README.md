@@ -27,7 +27,7 @@ pinned: false
   <p align="center">
     Prédiction du risque de départ des employés : un modèle de Machine Learning exposé par une API REST, déployé en continu.
     <br />
-    <a href="docs/index.md"><strong>Explorer la documentation »</strong></a>
+    <a href="https://tessilimic.github.io/turnover_model/"><strong>Explorer la documentation »</strong></a>
     <br />
     <br />
     <a href="#usage">Exemples</a>
@@ -263,7 +263,8 @@ flowchart LR
 * **CI** (`.github/workflows/ci.yaml`) : tests unitaires, d'intégration (PostgreSQL) et
   fonctionnels, build de l'image Docker, build de la documentation.
 * **CD** (`.github/workflows/deploy.yaml`) : à chaque fusion dans `main`, relance la CI
-  puis pousse le code vers le Space, qui reconstruit l'image.
+  puis pousse le code vers le Space (qui reconstruit l'image) et publie la documentation
+  sur GitHub Pages.
 * **Configuration GitHub** : secret `HF_TOKEN`, variables `HF_USERNAME` et `HF_SPACE_NAME`.
 
 Détails, vérification et retour arrière : [Déploiement](docs/deploiement.md).
@@ -277,17 +278,18 @@ Détails, vérification et retour arrière : [Déploiement](docs/deploiement.md)
 
 | Outil | Contenu | Accès |
 |---|---|---|
-| **Swagger** | Référence interactive de l'API | `/docs` sur l'API, [docs/api](docs/api/index.md) |
-| **MkDocs** | Guides, modèle, architecture, maintenance | `mkdocs serve` |
-| **Sphinx** | Référence du code (docstrings) | `sphinx-build -b html sphinx site/code` |
-| **Markdown** | Ce README et les pages de `docs/` | Directement sur GitHub |
+| **MkDocs** | Guides, modèle, architecture, maintenance | [tessilimic.github.io/turnover_model](https://tessilimic.github.io/turnover_model/) |
+| **Sphinx** | Référence du code (docstrings) | [tessilimic.github.io/turnover_model/code](https://tessilimic.github.io/turnover_model/code/) |
+| **Swagger** | Référence interactive de l'API | `/docs` sur l'API, et [dans le site MkDocs](https://tessilimic.github.io/turnover_model/api/) |
+| **Markdown** | Ce README et les pages de `docs/` | Directement sur GitHub ([docs/](docs/index.md)) |
+
+Le site (MkDocs + Sphinx) est publié sur **GitHub Pages** à chaque fusion dans `main`.
+Aperçu en local :
 
 ```sh
 pip install -r requirements-docs.txt
 mkdocs serve                                   # http://127.0.0.1:8000
 ```
-
-Le site complet est aussi produit par la CI (artefact *documentation*).
 
 <p align="right">(<a href="#readme-top">retour en haut</a>)</p>
 
@@ -300,7 +302,7 @@ Le site complet est aussi produit par la CI (artefact *documentation*).
 - [x] API FastAPI avec validation et Swagger
 - [x] Base PostgreSQL, enregistrement des prédictions
 - [x] Tests unitaires, d'intégration et fonctionnels
-- [x] Documentation et protocole de maintenance
+- [x] Documentation et protocole de maintenance, publiés sur GitHub Pages
 - [ ] Import incrémental des nouveaux départs observés
 - [ ] Réévaluation de la régression logistique ; modèle sans variables sensibles
 - [ ] Explication SHAP de chaque prédiction

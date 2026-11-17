@@ -12,7 +12,10 @@ La référence de chaque module, classe et fonction est générée par **Sphinx*
 | Base de données | `src.db.models`, `src.db.session`, `src.db.init_db` |
 | Scripts | `scripts.export_openapi` |
 
-!!! note "Disponibilité"
+En ligne : <https://tessilimic.github.io/turnover_model/code/> (publiée sur GitHub Pages
+à chaque fusion dans `main`).
+
+!!! note "En local"
     La référence est construite avec le site complet (`site/code/`) :
 
     ```bash
