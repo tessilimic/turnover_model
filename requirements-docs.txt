@@ -3,5 +3,5 @@
 mkdocs==1.6.1
 mkdocs-material==9.8.1
 mkdocs-swagger-ui-tag==0.8.1
-sphinx==9.0.4
+sphinx==9.2.0
 furo==2025.12.19
