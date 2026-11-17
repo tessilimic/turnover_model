@@ -1,0 +1,378 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Turnover API",
+    "summary": "Prédiction du risque de départ des employés.",
+    "description": "\nEstime le **risque de départ** d'un employé à partir de son profil RH\n(SIRH, sondage interne, évaluations).\n\n* Modèle : Random Forest (scikit-learn), seuil de décision **0,41**,\n  choisi pour détecter un maximum de départs (F2).\n* Chaque prédiction est **enregistrée** en base (entrées et résultat).\n* Documentation complète : guide utilisateur, fiche du modèle, architecture\n  et maintenance dans le dossier `docs/` du dépôt (site MkDocs).\n",
+    "version": "0.3.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "monitoring"
+        ],
+        "summary": "État du service",
+        "description": "Renvoie `{\"status\": \"ok\"}` si l'API répond.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                },
+                "example": {
+                  "status": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/predict": {
+      "post": {
+        "tags": [
+          "prédiction"
+        ],
+        "summary": "Prédire le départ d'un employé",
+        "description": "Estime la probabilité de départ d'un employé et enregistre la prédiction.\n\n- **probabilite_depart** : probabilité estimée par le modèle (0 à 1).\n- **depart_predit** : `true` si la probabilité atteint le seuil (0,41).\n  Ce seuil privilégie la détection des départs : environ 8 départs réels\n  sur 10 sont signalés, au prix de fausses alertes (≈ 3 alertes sur 10 justifiées).\n- Les entrées sont stockées dans la table `employes`, le résultat dans\n  `predictions` (identifiant renvoyé dans **id_prediction**).",
+        "operationId": "predict_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Prédiction calculée et enregistrée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionOutput"
+                },
+                "example": {
+                  "id_prediction": 1471,
+                  "probabilite_depart": 0.6367,
+                  "seuil": 0.41,
+                  "depart_predit": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Entrée invalide (champ manquant, valeur hors liste ou hors bornes, champ inconnu). Rien n'est enregistré.",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": [
+                    {
+                      "type": "literal_error",
+                      "loc": [
+                        "body",
+                        "poste"
+                      ],
+                      "msg": "Input should be 'Assistant de Direction', 'Cadre Commercial', ...",
+                      "input": "Astronaute"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EmployeInput": {
+        "properties": {
+          "age": {
+            "type": "integer",
+            "maximum": 80.0,
+            "minimum": 16.0,
+            "title": "Age",
+            "description": "Âge en années"
+          },
+          "genre": {
+            "type": "string",
+            "enum": [
+              "F",
+              "M"
+            ],
+            "title": "Genre"
+          },
+          "revenu_mensuel": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Revenu Mensuel",
+            "description": "Revenu mensuel brut"
+          },
+          "statut_marital": {
+            "type": "string",
+            "enum": [
+              "Célibataire",
+              "Marié(e)",
+              "Divorcé(e)"
+            ],
+            "title": "Statut Marital"
+          },
+          "departement": {
+            "type": "string",
+            "enum": [
+              "Commercial",
+              "Consulting",
+              "Ressources Humaines"
+            ],
+            "title": "Departement"
+          },
+          "poste": {
+            "type": "string",
+            "enum": [
+              "Assistant de Direction",
+              "Cadre Commercial",
+              "Consultant",
+              "Directeur Technique",
+              "Manager",
+              "Représentant Commercial",
+              "Ressources Humaines",
+              "Senior Manager",
+              "Tech Lead"
+            ],
+            "title": "Poste"
+          },
+          "nombre_experiences_precedentes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Nombre Experiences Precedentes"
+          },
+          "annee_experience_totale": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Annee Experience Totale",
+            "description": "Années d'expérience au total"
+          },
+          "annees_dans_le_poste_actuel": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Annees Dans Le Poste Actuel"
+          },
+          "nombre_participation_pee": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Nombre Participation Pee",
+            "description": "Participations au plan d'épargne"
+          },
+          "nb_formations_suivies": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Nb Formations Suivies"
+          },
+          "distance_domicile_travail": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Distance Domicile Travail",
+            "description": "Distance en km"
+          },
+          "niveau_education": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Niveau Education"
+          },
+          "domaine_etude": {
+            "type": "string",
+            "enum": [
+              "Autre",
+              "Entrepreunariat",
+              "Infra & Cloud",
+              "Marketing",
+              "Ressources Humaines",
+              "Transformation Digitale"
+            ],
+            "title": "Domaine Etude"
+          },
+          "frequence_deplacement": {
+            "type": "string",
+            "enum": [
+              "Aucun",
+              "Occasionnel",
+              "Frequent"
+            ],
+            "title": "Frequence Deplacement"
+          },
+          "annees_depuis_la_derniere_promotion": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Annees Depuis La Derniere Promotion"
+          },
+          "annes_sous_responsable_actuel": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Annes Sous Responsable Actuel",
+            "description": "Années avec le manager actuel"
+          },
+          "satisfaction_employee_environnement": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Satisfaction Employee Environnement"
+          },
+          "note_evaluation_precedente": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Note Evaluation Precedente"
+          },
+          "satisfaction_employee_nature_travail": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Satisfaction Employee Nature Travail"
+          },
+          "satisfaction_employee_equipe": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Satisfaction Employee Equipe"
+          },
+          "satisfaction_employee_equilibre_pro_perso": {
+            "type": "integer",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Satisfaction Employee Equilibre Pro Perso"
+          },
+          "heure_supplementaires": {
+            "type": "string",
+            "enum": [
+              "Oui",
+              "Non"
+            ],
+            "title": "Heure Supplementaires"
+          },
+          "augementation_salaire_precedente": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Augementation Salaire Precedente",
+            "description": "Dernière augmentation, en % (ex. 11 pour 11 %)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "age",
+          "genre",
+          "revenu_mensuel",
+          "statut_marital",
+          "departement",
+          "poste",
+          "nombre_experiences_precedentes",
+          "annee_experience_totale",
+          "annees_dans_le_poste_actuel",
+          "nombre_participation_pee",
+          "nb_formations_suivies",
+          "distance_domicile_travail",
+          "niveau_education",
+          "domaine_etude",
+          "frequence_deplacement",
+          "annees_depuis_la_derniere_promotion",
+          "annes_sous_responsable_actuel",
+          "satisfaction_employee_environnement",
+          "note_evaluation_precedente",
+          "satisfaction_employee_nature_travail",
+          "satisfaction_employee_equipe",
+          "satisfaction_employee_equilibre_pro_perso",
+          "heure_supplementaires",
+          "augementation_salaire_precedente"
+        ],
+        "title": "EmployeInput",
+        "description": "Profil d'un employé. Les noms de champs sont ceux des fichiers sources.",
+        "examples": [
+          {
+            "age": 41,
+            "annee_experience_totale": 8,
+            "annees_dans_le_poste_actuel": 4,
+            "annees_depuis_la_derniere_promotion": 0,
+            "annes_sous_responsable_actuel": 5,
+            "augementation_salaire_precedente": 11,
+            "departement": "Commercial",
+            "distance_domicile_travail": 1,
+            "domaine_etude": "Infra & Cloud",
+            "frequence_deplacement": "Occasionnel",
+            "genre": "F",
+            "heure_supplementaires": "Oui",
+            "nb_formations_suivies": 0,
+            "niveau_education": 2,
+            "nombre_experiences_precedentes": 8,
+            "nombre_participation_pee": 0,
+            "note_evaluation_precedente": 3,
+            "poste": "Cadre Commercial",
+            "revenu_mensuel": 5993,
+            "satisfaction_employee_environnement": 2,
+            "satisfaction_employee_equilibre_pro_perso": 1,
+            "satisfaction_employee_equipe": 1,
+            "satisfaction_employee_nature_travail": 4,
+            "statut_marital": "Célibataire"
+          }
+        ]
+      },
+      "PredictionOutput": {
+        "properties": {
+          "id_prediction": {
+            "type": "integer",
+            "title": "Id Prediction",
+            "description": "Identifiant de la prédiction en base (table predictions)"
+          },
+          "probabilite_depart": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Probabilite Depart",
+            "description": "Probabilité de départ estimée"
+          },
+          "seuil": {
+            "type": "number",
+            "title": "Seuil",
+            "description": "Seuil de décision du modèle"
+          },
+          "depart_predit": {
+            "type": "boolean",
+            "title": "Depart Predit",
+            "description": "True si probabilite_depart >= seuil"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id_prediction",
+          "probabilite_depart",
+          "seuil",
+          "depart_predit"
+        ],
+        "title": "PredictionOutput"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "prédiction",
+      "description": "Estimer le risque de départ d'un employé."
+    },
+    {
+      "name": "monitoring",
+      "description": "Vérifier que le service est en ligne."
+    }
+  ]
+}

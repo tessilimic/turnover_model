@@ -61,7 +61,14 @@ def charger_donnees(engine: Engine) -> pd.DataFrame:
     """Lit le jeu d'entraînement en base : employés avec un départ observé.
 
     Les prédictions faites par l'API ne servent jamais à l'entraînement.
-    Tri par id_employee : même ordre que les CSV, donc même découpage train/test.
+    Tri par ``id_employee`` : même ordre que les CSV, donc même découpage train/test.
+
+    Args:
+        engine: Connexion SQLAlchemy (PostgreSQL ou SQLite).
+
+    Returns:
+        Une ligne par employé : les colonnes de :data:`~src.features.COLONNES_ENTREE`
+        et ``depart`` (départ observé).
     """
     requete = (
         select(*(getattr(Employe, col) for col in COLONNES_ENTREE), Prediction.depart)
@@ -74,13 +81,33 @@ def charger_donnees(engine: Engine) -> pd.DataFrame:
 
 
 def separer_x_y(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Sépare les entrées du modèle et la cible.
+
+    Args:
+        df: Résultat de :func:`charger_donnees`.
+
+    Returns:
+        ``(X, y)`` : les colonnes d'entrée dans l'ordre attendu, et la cible
+        en 0/1 (``True`` sous PostgreSQL et ``1`` sous SQLite donnent tous deux 1).
+    """
     X = df[COLONNES_ENTREE]
     y = df["depart"].astype(int)
     return X, y
 
 
 def construire_pipeline() -> Pipeline:
-    """Création des features + encodage + forêt, dans un seul objet."""
+    """Construit le pipeline complet, non entraîné.
+
+    Étapes :
+
+    1. ``features`` : :func:`~src.features.ajouter_features` ;
+    2. ``prep`` : one-hot (nominales, binaires), ordinal (déplacements),
+       numériques inchangées (pas de mise à l'échelle pour des arbres) ;
+    3. ``clf`` : forêt aléatoire (:data:`HYPERPARAMETRES`).
+
+    Returns:
+        Un pipeline scikit-learn neuf à chaque appel.
+    """
     preprocesseur = ColumnTransformer([
         ("nom", OneHotEncoder(handle_unknown="ignore"), NOMINALES),
         ("bin", OneHotEncoder(drop="if_binary"), BINAIRES),
@@ -95,6 +122,18 @@ def construire_pipeline() -> Pipeline:
 
 
 def evaluer(pipeline: Pipeline, X: pd.DataFrame, y: pd.Series, seuil: float) -> dict[str, float]:
+    """Calcule les métriques d'évaluation au seuil donné.
+
+    Args:
+        pipeline: Modèle entraîné (doit fournir ``predict_proba``).
+        X: Entrées.
+        y: Départs réels (0/1).
+        seuil: Probabilité à partir de laquelle un départ est prédit.
+
+    Returns:
+        ``roc_auc`` et ``pr_auc`` (indépendants du seuil), puis ``recall``,
+        ``precision``, ``f1`` et ``balanced_accuracy`` au seuil.
+    """
     proba = pipeline.predict_proba(X)[:, 1]
     pred = (proba >= seuil).astype(int)
     return {

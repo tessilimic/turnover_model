@@ -1,0 +1,77 @@
+site_name: Turnover API
+site_description: Prédiction du risque de départ des employés — modèle, API et maintenance
+site_url: https://tessilimic.github.io/turnover_model/
+repo_url: https://github.com/tessilimic/turnover_model
+repo_name: tessilimic/turnover_model
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+
+# With --strict, broken links and anchors fail the build.
+validation:
+  links:
+    anchors: warn
+
+theme:
+  name: material
+  language: fr
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.tabs.link
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Mode sombre
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Mode clair
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search:
+      lang: fr
+  - swagger-ui-tag
+
+nav:
+  - Accueil: index.md
+  - Guide utilisateur:
+      - Installation et configuration: installation.md
+      - Utiliser l'API: utilisation.md
+      - Référence de l'API (Swagger): api/index.md
+  - Modèle:
+      - Fiche technique: modele.md
+      - Performances: performances.md
+  - Développeurs:
+      - Architecture: architecture.md
+      - Choix techniques: choix-techniques.md
+      - Déploiement (CI/CD): deploiement.md
+      - Tests: tests.md
+      - Maintenance et mises à jour: maintenance.md
+      - Contribuer: contribuer.md
+      - Référence du code (Sphinx): reference.md

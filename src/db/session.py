@@ -16,11 +16,16 @@ DOSSIER_SQL = Path(__file__).resolve().parents[2] / "sql"
 
 
 def get_database_url() -> str:
+    """Adresse de la base : variable ``DATABASE_URL``, sinon :data:`URL_PAR_DEFAUT`."""
     return os.getenv("DATABASE_URL", URL_PAR_DEFAUT)
 
 
 @lru_cache
 def get_engine() -> Engine:
+    """Connexion SQLAlchemy partagée (créée au premier appel).
+
+    Sous SQLite, active les clés étrangères (désactivées par défaut).
+    """
     engine = create_engine(get_database_url())
     if engine.dialect.name == "sqlite":
         # SQLite n'applique les clés étrangères que si on le lui demande.

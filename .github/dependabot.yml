@@ -1,0 +1,24 @@
+# Weekly dependency update PRs (see docs/maintenance.md).
+# Model libraries (scikit-learn, numpy, pandas, joblib) will fail CI on purpose:
+# the model must be retrained in the same PR.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      api-and-tools:
+        patterns: ["*"]
+        exclude-patterns: ["scikit-learn", "numpy", "pandas", "joblib"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

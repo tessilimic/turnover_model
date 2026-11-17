@@ -1,4 +1,8 @@
-"""Colonnes du modèle et création des features (repris du notebook)."""
+"""Colonnes du modèle et création des features (repris du notebook).
+
+Ce module est la source de vérité des colonnes : le schéma de l'API, la base
+de données et le pipeline s'appuient sur :data:`COLONNES_ENTREE`.
+"""
 
 import pandas as pd
 
@@ -92,7 +96,21 @@ NUMERIQUES = NUMERIQUES_BRUTES + NOUVELLES_FEATURES
 
 
 def ajouter_features(X: pd.DataFrame) -> pd.DataFrame:
-    """Ajoute les 7 features créées dans le notebook, sans modifier X."""
+    """Ajoute les 7 features créées dans le notebook.
+
+    Première étape du pipeline exporté : l'API n'a donc qu'à fournir les
+    colonnes brutes (:data:`COLONNES_ENTREE`).
+
+    Args:
+        X: Données brutes, au moins les colonnes utilisées ci-dessous.
+
+    Returns:
+        Une copie de ``X`` avec les colonnes de :data:`NOUVELLES_FEATURES`.
+        ``X`` n'est pas modifié.
+
+    Les divisions utilisent ``+ 1`` au dénominateur pour éviter la division
+    par zéro (employé sans expérience, nouveau dans son poste).
+    """
     X = X.copy()
     X["satisfaction_moyenne"] = X[SATISFACTIONS].mean(axis=1)
     # au moins un point de mécontentement fort

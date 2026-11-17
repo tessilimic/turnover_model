@@ -14,5 +14,6 @@ joblib==1.6.0
 
 # Tests
 httpx
+pyyaml
 pytest
 pytest-cov
